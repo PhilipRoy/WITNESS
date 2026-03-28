@@ -1,0 +1,280 @@
+<!--
+  W.I.T.N.E.S.S. - Web-based Interrogation and Testimony via a Neural Engaged Speech System
+  Copyright (C) 2026 Philip Roy <https://www.bluengrey.com>
+
+  This program is free software: you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation, either version 3 of the License, or
+  (at your option) any later version.
+
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+  GNU General Public License for more details.
+
+  You should have received a copy of the GNU General Public License
+  along with this program. If not, see <https://www.gnu.org/licenses/>.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>W.I.T.N.E.S.S. - Voice Demonstrations</title>
+  <style>
+    body {
+      background-color: white;
+      color: #222;
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 2em;
+    }
+    .voice-table {
+      background: #e0e0e0;
+      border-radius: 8px;
+      padding: 1em;
+      margin: 2em auto;
+      max-width: 90%;
+    }
+    h1 {
+      text-align: center;
+      color: #333;
+    }
+
+a {
+      text-decoration: none;
+      color: #0066cc;
+      font-weight: bold;
+      font-size: 1.2em;
+    }
+
+    .voice-list {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+    }
+
+    .voice-card {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr 1fr 4fr 0.7fr;
+      gap: 0.4em;
+      background: #f9f9f9;
+      padding: 0.4em 0.6em;
+      border-radius: 6px;
+      margin-bottom: 0.8em;
+      font-weight: normal;
+      align-items: center;
+    }
+
+    .voice-header.heading-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr 1fr 4fr 0.7fr;
+      background: #e0e0e0;
+      font-weight: bold;
+      padding: 0.6em;
+      border-radius: 6px;
+      margin-bottom: 0.6em;
+      box-sizing: border-box;
+      width: 100%;
+      margin-left: 0;
+      margin-right: 0;
+      padding-left: 0.6em;
+      padding-right: 0.6em;
+    }
+
+    .voice-card > div {
+      font-weight: normal;
+    }
+
+    .play-button {
+      font-size: 1.5em;
+      background: none;
+      border: none;
+      cursor: pointer;
+    }
+
+    .play-container {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.9em;
+      color: #555;
+      width: 100%;
+    }
+
+.system-status {
+  text-align: center;
+  font-size: 1.1em;
+  font-weight: bold;
+  color: red;
+  margin-bottom: 1rem;
+  display: none;
+}
+
+/* Pulse animation for status message */
+.fade-pulse {
+  animation: fadeInOut 1.5s ease-in-out infinite;
+}
+
+@keyframes fadeInOut {
+  0%, 100% { opacity: 0.2; }
+  50% { opacity: 1; }
+}
+
+.play-button.pulsing {
+  animation: pulseRed 1s infinite;
+}
+
+@keyframes pulseRed {
+  0% { filter: drop-shadow(0 0 2px red); }
+  50% { filter: drop-shadow(0 0 6px red); }
+  100% { filter: drop-shadow(0 0 2px red); }
+}
+  </style>
+</head>
+<body>
+        <a href="index.html">&larr; Admin</a><br />
+
+  <h1>W.I.T.N.E.S.S. - Voice Demonstrations</h1>
+
+<div id="ttsLoadingMessage" class="system-status fade-pulse">Generating voice…</div>
+<textarea id="ttsInput" placeholder="Type the text that you want spoken here and then click the speaker icon for the voice you want to speak the text..." rows="4" style="width: 90%; max-width: 900px; margin: 2em auto; display: block; font-size: 1em; padding: 1em;"></textarea>
+
+
+<div class="voice-table">
+  <div class="voice-list voice-header heading-row">
+    <div>Name</div>
+    <div>Gender</div>
+    <div>Age Range</div>
+    <div>Accent</div>
+    <div>Notes</div>
+    <div style="text-align: center;">Play</div>
+  </div>
+  <div class="voice-list" id="voiceListContainer">
+    <!-- Voice cards are inserted dynamically by loadVoices() -->
+  </div>
+</div>
+
+<script>
+  async function loadVoices() {
+    try {
+      const response = await fetch('/api/piper-voices');
+      if (!response.ok) {
+        throw new Error(`Server responded with status ${response.status}`);
+      }
+      const voices = await response.json();
+      const container = document.getElementById('voiceListContainer');
+      voices.forEach(voice => {
+        const row = document.createElement('div');
+        row.className = 'voice-card';
+        row.dataset.filename = voice["onnx-filename"];
+        row.innerHTML = `
+          <div>${voice.name}</div>
+          <div>${voice.gender}</div>
+          <div>${voice["age-range"]}</div>
+          <div>${voice.accent}</div>
+          <div>${voice.notes}</div>
+          <div class="play-container">
+            <button class="play-button">🔊</button>
+          </div>
+        `;
+        // Store voice metadata on the button element so the click handler can access
+        // it without needing a separate lookup or closure variable.
+        const playBtn = row.querySelector('.play-button');
+        playBtn.dataset.filename = voice["onnx-filename"] || '';
+        playBtn.dataset.jsonFile = voice["json-filename"] || (voice["onnx-filename"] ? voice["onnx-filename"].replace('.onnx', '.onnx.json') : '');
+        playBtn.dataset.speakerId = (voice["speaker_id"] !== undefined && voice["speaker_id"] !== null) ? String(voice["speaker_id"]) : '';
+        playBtn.addEventListener('click', function () { previewVoice(this); });
+
+        container.appendChild(row);
+      });
+    } catch (err) {
+      console.error("Failed to load voices:", err);
+      alert("Error loading voice list. Please check the server.");
+    }
+  }
+
+  async function previewVoice(button) {
+    const text = document.getElementById('ttsInput').value.trim();
+    if (!text) {
+      alert("Please enter text to speak.");
+      return;
+    }
+
+    const filename = button.dataset.filename || '';
+    const speakerId = button.dataset.speakerId ? parseInt(button.dataset.speakerId, 10) : null;
+
+    // Disable all play buttons while a preview is generating to prevent concurrent
+    // requests. Pulse the clicked button as a visual loading indicator.
+    const ttsMsg = document.getElementById('ttsLoadingMessage');
+    const allPlayButtons = Array.from(document.querySelectorAll('.play-button'));
+    if (ttsMsg) ttsMsg.style.display = 'block';
+    allPlayButtons.forEach(b => { b.disabled = true; });
+    button.classList.add('pulsing');
+
+    try {
+      const response = await fetch('/api/play-voice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: text,
+          voice_file: filename,
+          speaker_id: speakerId
+        })
+      });
+
+      // Check status before consuming the body, because reading a JSON error body
+      // and an audio body use different code paths.
+      if (!response.ok) {
+        let errMsg = `Playback request failed (${response.status}).`;
+        try {
+          const errData = await response.json();
+          if (errData && errData.detail) errMsg = errData.detail;
+        } catch {}
+        throw new Error(errMsg);
+      }
+
+      const ct = (response.headers.get('content-type') || '').toLowerCase();
+      if (!ct.startsWith('audio/')) {
+        let detail = '';
+        try {
+          const errData = await response.json();
+          detail = (errData && errData.detail) ? ` ${errData.detail}` : '';
+        } catch {}
+        throw new Error(`Server did not return audio.${detail}`);
+      }
+
+      const blob = await response.blob();
+      if (!blob || blob.size < 44) throw new Error('Audio response too small.');
+
+      const audioUrl = URL.createObjectURL(blob);
+      const audio = new Audio(audioUrl);
+      audio.addEventListener('ended', () => URL.revokeObjectURL(audioUrl));
+
+      try {
+        await audio.play();
+      } catch (err) {
+        // Browsers may block autoplay if there has been no recent user interaction.
+        // Wait for the next click or keypress and retry.
+        console.warn("Autoplay blocked, waiting for a click/keypress to play…", err);
+        const oneShot = () => {
+          audio.play().catch(console.error);
+          window.removeEventListener('click', oneShot);
+          window.removeEventListener('keydown', oneShot);
+        };
+        window.addEventListener('click', oneShot, { once: true });
+        window.addEventListener('keydown', oneShot, { once: true });
+      }
+    } catch (error) {
+      console.error("Error playing voice preview:", error);
+      alert(error.message || "There was an error trying to play the voice.");
+    } finally {
+      if (ttsMsg) ttsMsg.style.display = 'none';
+      button.classList.remove('pulsing');
+      allPlayButtons.forEach(b => { b.disabled = false; });
+    }
+  }
+
+  window.onload = loadVoices;
+</script>
+</body>
+</html>

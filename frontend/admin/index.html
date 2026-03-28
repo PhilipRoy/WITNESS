@@ -1,0 +1,88 @@
+<!--
+  W.I.T.N.E.S.S. - Web-based Interrogation and Testimony via a Neural Engaged Speech System
+  Copyright (C) 2026 Philip Roy <https://www.bluengrey.com>
+
+  This program is free software: you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation, either version 3 of the License, or
+  (at your option) any later version.
+
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+  GNU General Public License for more details.
+
+  You should have received a copy of the GNU General Public License
+  along with this program. If not, see <https://www.gnu.org/licenses/>.
+-->
+<!--
+  Admin Dashboard — intentionally hidden from the main navigation.
+  Access directly via URL: http://localhost:8010/admin/
+  This page uses a white background (unlike all other WITNESS pages) to make
+  it visually distinct and remind users they are in an administrative area.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>W.I.T.N.E.S.S. - Admin Dashboard</title>
+  <style>
+    body {
+      background-color: white;
+      color: #222;
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 2em;
+    }
+    h1 {
+      text-align: center;
+      color: #333;
+    }
+    p {
+      max-width: 800px;
+      margin: 0 auto 2em;
+      text-align: center;
+      font-size: 1.1em;
+    }
+    ul {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 0;
+      list-style: none;
+    }
+    li {
+      margin: 1em 0;
+      text-align: center;
+    }
+    a {
+      text-decoration: none;
+      color: #0066cc;
+      font-weight: bold;
+      font-size: 1.2em;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+        <a href="../index.html">&larr; WITNESS</a><br />
+
+  <h1>W.I.T.N.E.S.S. - Admin Dashboard</h1>
+  <p>Welcome to the hidden administrative section of the W.I.T.N.E.S.S. system.</p>
+  <ul>
+    <li>
+      <a href="system-check.html">System Check</a><br />
+      <small>Checks whether all required technologies are installed and up to date, including Python libraries, Ollama, Piper TTS, Faster-Whisper, and ffmpeg.</small>
+    </li>
+      <li>
+      <a href="voice-demos.html">Voice Demonstrations</a><br />
+      <small>Lets you audition all installed Piper TTS voices using custom text before assigning them to a persona.</small>
+    </li>
+    <li>
+      <a href="custom-dictionary.html">Custom Dictionary</a><br />
+      <small>This tool allows you to add custom words to the spell checker, such as persona names (Priya, Mereana), NZ place names, and technical terms.</small>
+    </li>
+  </ul>
+</body>
+</html>

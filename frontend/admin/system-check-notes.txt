@@ -1,0 +1,7 @@
+<p><strong>Notes - 12/8/2025</strong></p>
+<ul>
+<li>Python was rolled back to 3.10 to resolve conflicts with pydantic, FastAPI, and the rest of the WITNESS system.</li>
+<li>Whisper STT (small.en) is now the sole speech-to-text backend to reduce model size and improve consistency.</li>
+<li>Some Python package versions are pinned to ensure compatibility with Apple Silicon (M1/M2) Macs and to avoid breaking changes from upstream updates. Many aspects of the system will work faster on more powerful computers, especially those with a GPU for processing.</li>
+<li>Version checks for certain tools (e.g., Piper, ffmpeg) pull data from online sources. These may occasionally show "Not available" or "Unknown" if the information cannot be obtained.</li>
+</ul>

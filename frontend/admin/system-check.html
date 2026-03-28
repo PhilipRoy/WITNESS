@@ -1,0 +1,195 @@
+<!--
+  W.I.T.N.E.S.S. - Web-based Interrogation and Testimony via a Neural Engaged Speech System
+  Copyright (C) 2026 Philip Roy <https://www.bluengrey.com>
+
+  This program is free software: you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation, either version 3 of the License, or
+  (at your option) any later version.
+
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+  GNU General Public License for more details.
+
+  You should have received a copy of the GNU General Public License
+  along with this program. If not, see <https://www.gnu.org/licenses/>.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>W.I.T.N.E.S.S. - System Check</title>
+  <style>
+    body {
+      background-color: white;
+      color: #222;
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 2em;
+    }
+    h1 {
+      text-align: center;
+      color: #333;
+    }
+
+a {
+      text-decoration: none;
+      color: #0066cc;
+      font-weight: bold;
+      font-size: 1.2em;
+    }
+
+    table {
+      margin: 2em auto;
+      border-collapse: collapse;
+      width: 90%;
+      max-width: 900px;
+      border: 1px solid #ccc;
+    }
+    th, td {
+      padding: 1em;
+      text-align: center;
+      border: 1px solid #ddd;
+      word-break: break-word;
+    }
+    th {
+      background-color: #f3f3f3;
+    }
+    .status-dot {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      margin-bottom: 0.5em;
+    }
+    .green { background-color: #4CAF50; }
+    .orange { background-color: #FF9800; }
+    .red { background-color: #F44336; }
+
+.system-status {
+  text-align: center;
+  font-size: 1.1em;
+  font-weight: bold;
+  color: red;
+  margin-bottom: 1rem;
+}
+
+/* Pulse animation for status message */
+.fade-pulse {
+  animation: fadeInOut 1.5s ease-in-out infinite;
+}
+
+@keyframes fadeInOut {
+  0%, 100% { opacity: 0.2; }
+  50% { opacity: 1; }
+}
+  </style>
+</head>
+<body>
+        <a href="index.html">&larr; Admin</a><br />
+
+  <h1>W.I.T.N.E.S.S. - System Check</h1>
+  <p style="font-style: italic; text-align: center;">Internet connection required for version checking</p>
+  <div id="loadingMessage" class="system-status fade-pulse">Loading System Status</div>
+
+  <div id="adminNotes" style="margin: 2em auto; max-width: 900px;"></div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Technology</th>
+        <th>Status</th>
+        <th>Version Check</th>
+      </tr>
+    </thead>
+    <tbody id="resultsTable">
+      <!-- Rows are inserted dynamically by fetchSystemCheck() -->
+    </tbody>
+  </table>
+
+  <script>
+    const checks = [
+      "python", "fastapi", "uvicorn", "pydantic", "ollama", "torch",
+      "ctranslate2", "faster-whisper", "faster-whisper-model-small.en", "piper-tts",
+      "sounddevice", "python-docx", "python-multipart", "pip",
+      "pydub", "ffmpeg"
+    ];
+
+    async function fetchSystemCheck() {
+      try {
+        const response = await fetch("../backend/system-check");
+        const data = await response.json();
+        const tbody = document.getElementById("resultsTable");
+        const loadingMessage = document.getElementById("loadingMessage");
+
+        const links = {
+          "python": "https://www.python.org/",
+          "fastapi": "https://fastapi.tiangolo.com/",
+          "uvicorn": "https://uvicorn.dev/",
+          "pydantic": "https://docs.pydantic.dev/",
+          "ollama": "https://ollama.com/",
+          "torch": "https://pytorch.org/",
+          "ctranslate2": "https://github.com/OpenNMT/CTranslate2",
+          "faster-whisper": "https://github.com/SYSTRAN/faster-whisper",
+          "faster-whisper-model-small.en": "https://huggingface.co/Systran/faster-whisper-small.en",
+          "piper-tts": "https://github.com/OHF-Voice/piper1-gpl",
+          "sounddevice": "https://python-sounddevice.readthedocs.io/",
+          "python-docx": "https://python-docx.readthedocs.io/",
+          "python-multipart": "https://multipart.fastapiexpert.com/",
+          "pip": "https://pip.pypa.io/",
+          "pydub": "https://github.com/jiaaro/pydub",
+          "ffmpeg": "https://ffmpeg.org/"
+        };
+
+        checks.forEach(pkg => {
+          const result = data[pkg] || {};
+          const statusColor = result.status === "ok" ? "green" : "red";
+
+          let versionColor = "green";
+          if (result.version_state === "outdated") versionColor = "orange";
+          if (result.version_state === "major_outdated") versionColor = "red";
+
+          let installedVersionContent = result.installed_version || "N/A";
+          // Append the expected model name alongside the Ollama version so it is
+          // visible at a glance that the correct LLM model is in use.
+          if (pkg === "ollama") {
+            installedVersionContent += " (llama3.2:3b-instruct-q4_K_M)";
+          }
+
+          const row = document.createElement("tr");
+          row.innerHTML = `
+            <td>${links[pkg] ? `<a href="${links[pkg]}" target="_blank">${pkg} &#x2197;</a>` : pkg}</td>
+            <td>
+              <div class="status-dot ${statusColor}"></div><br>
+              ${installedVersionContent}
+            </td>
+            <td>
+              <div class="status-dot ${versionColor}"></div><br>
+              ${result.latest_version || "Not available"}
+            </td>
+          `;
+          tbody.appendChild(row);
+        });
+        if (loadingMessage) loadingMessage.style.display = "none";
+      } catch (err) {
+        alert("Unable to contact backend. Please ensure the server is running.");
+      }
+    }
+
+    fetchSystemCheck();
+
+    // Optionally load local admin notes from system-check-notes.txt.
+    // This file is not distributed with WITNESS — it is for local site-specific notes
+    // (e.g., known version conflicts, deployment reminders). Fails silently if absent.
+    fetch("system-check-notes.txt")
+      .then(res => res.ok ? res.text() : "")
+      .then(html => {
+        if (html.trim()) {
+          document.getElementById("adminNotes").innerHTML = html;
+        }
+      })
+      .catch(() => {});
+  </script>
+</body>
+</html>

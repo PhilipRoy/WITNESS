@@ -1,0 +1,422 @@
+<!--
+  W.I.T.N.E.S.S. - Web-based Interrogation and Testimony via a Neural Engaged Speech System
+  Copyright (C) 2026 Philip Roy <https://www.bluengrey.com>
+
+  This program is free software: you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation, either version 3 of the License, or
+  (at your option) any later version.
+
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+  GNU General Public License for more details.
+
+  You should have received a copy of the GNU General Public License
+  along with this program. If not, see <https://www.gnu.org/licenses/>.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>W.I.T.N.E.S.S. - Custom Dictionary</title>
+  <style>
+    body {
+      background-color: white;
+      color: #222;
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 2em;
+    }
+    h1 {
+      text-align: center;
+      color: #333;
+    }
+    a {
+      text-decoration: none;
+      color: #0066cc;
+      font-weight: bold;
+      font-size: 1.2em;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    .container {
+      max-width: 900px;
+      margin: 2em auto;
+    }
+    .info {
+      background-color: #f9f9f9;
+      border: 1px solid #ddd;
+      padding: 1.5em;
+      margin-bottom: 2em;
+      border-radius: 4px;
+    }
+    .info h3 {
+      margin-top: 0;
+      color: #333;
+    }
+    .info ul {
+      margin: 0.5em 0;
+      padding-left: 2em;
+    }
+    .info li {
+      margin: 0.3em 0;
+    }
+    textarea {
+      width: 100%;
+      height: 400px;
+      font-family: 'Courier New', monospace;
+      font-size: 14px;
+      padding: 1em;
+      border: 2px solid #ccc;
+      border-radius: 4px;
+      box-sizing: border-box;
+      resize: vertical;
+    }
+    textarea:focus {
+      outline: none;
+      border-color: #0066cc;
+    }
+    .button-group {
+      margin-top: 1em;
+      text-align: center;
+    }
+    button {
+      background-color: #0066cc;
+      color: white;
+      border: none;
+      padding: 12px 30px;
+      font-size: 16px;
+      font-weight: bold;
+      border-radius: 4px;
+      cursor: pointer;
+      margin: 0 0.5em;
+    }
+    button:hover {
+      background-color: #0052a3;
+    }
+    button:disabled {
+      background-color: #ccc;
+      cursor: not-allowed;
+    }
+    .cancel-btn {
+      background-color: #666;
+    }
+    .cancel-btn:hover {
+      background-color: #555;
+    }
+    .status {
+      text-align: center;
+      margin-top: 1em;
+      font-weight: bold;
+      min-height: 24px;
+    }
+    .status.success {
+      color: #4CAF50;
+    }
+    .status.error {
+      color: #F44336;
+    }
+    .word-count {
+      text-align: right;
+      color: #666;
+      font-size: 14px;
+      margin-top: 0.5em;
+    }
+    .section {
+      margin-bottom: 4em;
+    }
+    h2 {
+      color: #333;
+      border-bottom: 2px solid #ddd;
+      padding-bottom: 0.5em;
+    }
+    .warning-info {
+      background-color: #fff3cd;
+      border: 1px solid #ffc107;
+    }
+    .warning-info h3 {
+      color: #856404;
+    }
+  </style>
+</head>
+<body>
+  <a href="index.html">&larr; Admin</a><br />
+
+  <h1>W.I.T.N.E.S.S. - Spell Checker Configuration</h1>
+
+  <div class="container">
+    <!-- CUSTOM DICTIONARY — words the spell checker should always accept.
+         The backend hot-reloads this file on every request, so changes take
+         effect immediately without restarting the server. -->
+    <div class="section">
+      <h2>✅ Custom Dictionary (Words to Accept)</h2>
+      <div class="info">
+        <h3>How to use the custom dictionary</h3>
+        <ul>
+          <li>Add one word per line (case-insensitive)</li>
+          <li>Lines starting with # are comments and will be ignored</li>
+          <li>Use this for persona names (Priya, Mereana, etc.)</li>
+          <li>Add NZ place names, surnames, and technical terms</li>
+          <li>Changes take effect immediately when saved</li>
+        </ul>
+        <p><strong>Note:</strong> Common NZ English spellings (colour, metre, etc.) are built into the system and don't need to be added here.</p>
+      </div>
+
+      <textarea id="dictionaryContent" placeholder="Loading custom dictionary..."></textarea>
+      <div class="word-count" id="wordCount">0 words</div>
+
+      <div class="button-group">
+        <button id="saveBtn">Save Dictionary</button>
+        <button class="cancel-btn" id="reloadBtn">Reload from File</button>
+      </div>
+
+      <div class="status" id="status"></div>
+    </div>
+
+    <!-- SUSPICIOUS WORDS — valid English words that are commonly mistyped in persona files.
+         These always trigger a spelling warning, even though they pass the dictionary check.
+         The backend hot-reloads this file on every request. -->
+    <div class="section">
+      <h2>⚠️ Suspicious Words (Words to Always Flag)</h2>
+      <div class="info warning-info">
+        <h3>What are suspicious words?</h3>
+        <p>Suspicious words are <strong>technically valid English words</strong> that commonly appear as typos in persona files. These words will <strong>always trigger a warning</strong> when detected, even though they're in the dictionary.</p>
+        <ul>
+          <li><strong>Example:</strong> "dunner" (valid word) is often a typo for "dinner"</li>
+          <li>Add one word per line (case-insensitive)</li>
+          <li>You can add inline comments after the word with #</li>
+          <li>Changes take effect immediately when saved</li>
+        </ul>
+      </div>
+
+      <textarea id="suspiciousContent" placeholder="Loading suspicious words..."></textarea>
+      <div class="word-count" id="suspiciousCount">0 words</div>
+
+      <div class="button-group">
+        <button id="saveSuspiciousBtn">Save Suspicious Words</button>
+        <button class="cancel-btn" id="reloadSuspiciousBtn">Reload from File</button>
+      </div>
+
+      <div class="status" id="suspiciousStatus"></div>
+    </div>
+  </div>
+
+  <script>
+    // Element references kept at the top so all dictionary functions share them.
+    const textarea = document.getElementById('dictionaryContent');
+    const saveBtn = document.getElementById('saveBtn');
+    const reloadBtn = document.getElementById('reloadBtn');
+    const status = document.getElementById('status');
+    const wordCount = document.getElementById('wordCount');
+    let originalContent = '';
+
+    // Suspicious Words elements
+    const suspiciousTextarea = document.getElementById('suspiciousContent');
+    const saveSuspiciousBtn = document.getElementById('saveSuspiciousBtn');
+    const reloadSuspiciousBtn = document.getElementById('reloadSuspiciousBtn');
+    const suspiciousStatus = document.getElementById('suspiciousStatus');
+    const suspiciousCount = document.getElementById('suspiciousCount');
+    let originalSuspiciousContent = '';
+
+    async function loadDictionary() {
+      try {
+        const response = await fetch('/api/custom-dictionary');
+        const data = await response.json();
+
+        if (data.exists) {
+          textarea.value = data.content;
+          originalContent = data.content;
+        } else {
+          textarea.value = '# Custom Dictionary for W.I.T.N.E.S.S. Spell Checker\n# Add one word per line\n\n';
+          originalContent = textarea.value;
+        }
+
+        updateWordCount();
+        showStatus('Dictionary loaded successfully', 'success');
+      } catch (err) {
+        showStatus('Failed to load dictionary: ' + err.message, 'error');
+      }
+    }
+
+    async function saveDictionary() {
+      saveBtn.disabled = true;
+      showStatus('Saving...', '');
+
+      try {
+        const response = await fetch('/api/custom-dictionary', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            content: textarea.value
+          })
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.detail || 'Unknown error');
+        }
+
+        const data = await response.json();
+        originalContent = textarea.value;
+        showStatus(`Dictionary saved successfully! ${data.words_loaded} words loaded.`, 'success');
+      } catch (err) {
+        showStatus('Failed to save: ' + err.message, 'error');
+      } finally {
+        saveBtn.disabled = false;
+      }
+    }
+
+    function reloadDictionary() {
+      if (textarea.value !== originalContent) {
+        if (!confirm('You have unsaved changes. Reload anyway?')) {
+          return;
+        }
+      }
+      loadDictionary();
+    }
+
+    // Count non-blank, non-comment lines and display the total next to the textarea.
+    function updateWordCount() {
+      const lines = textarea.value.split('\n');
+      const words = lines.filter(line => {
+        const trimmed = line.trim();
+        return trimmed && !trimmed.startsWith('#');
+      });
+      wordCount.textContent = `${words.length} words`;
+    }
+
+    // Display a status message below the dictionary textarea and clear it after 3 seconds.
+    function showStatus(message, type) {
+      status.textContent = message;
+      status.className = 'status ' + type;
+
+      if (message && type) {
+        setTimeout(() => {
+          status.textContent = '';
+          status.className = 'status';
+        }, 3000);
+      }
+    }
+
+    saveBtn.addEventListener('click', saveDictionary);
+    reloadBtn.addEventListener('click', reloadDictionary);
+    textarea.addEventListener('input', updateWordCount);
+
+    // Warn the user if they try to leave with unsaved dictionary changes.
+    window.addEventListener('beforeunload', (e) => {
+      if (textarea.value !== originalContent) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    });
+
+    loadDictionary();
+    loadSuspiciousWords();
+
+    // ========================================
+    // SUSPICIOUS WORDS FUNCTIONS
+    // ========================================
+
+    async function loadSuspiciousWords() {
+      try {
+        const response = await fetch('/api/suspicious-words');
+        const data = await response.json();
+
+        if (data.exists) {
+          suspiciousTextarea.value = data.content;
+          originalSuspiciousContent = data.content;
+        } else {
+          suspiciousTextarea.value = '# Suspicious Words List\n# Add words that should trigger warnings even though they\'re valid\n\n';
+          originalSuspiciousContent = suspiciousTextarea.value;
+        }
+
+        updateSuspiciousCount();
+        showSuspiciousStatus('Suspicious words loaded successfully', 'success');
+      } catch (err) {
+        showSuspiciousStatus('Failed to load suspicious words: ' + err.message, 'error');
+      }
+    }
+
+    async function saveSuspiciousWords() {
+      saveSuspiciousBtn.disabled = true;
+      showSuspiciousStatus('Saving...', '');
+
+      try {
+        const response = await fetch('/api/suspicious-words', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            content: suspiciousTextarea.value
+          })
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.detail || 'Unknown error');
+        }
+
+        const data = await response.json();
+        originalSuspiciousContent = suspiciousTextarea.value;
+        showSuspiciousStatus(`Suspicious words saved! ${data.words_loaded} words loaded.`, 'success');
+      } catch (err) {
+        showSuspiciousStatus('Failed to save: ' + err.message, 'error');
+      } finally {
+        saveSuspiciousBtn.disabled = false;
+      }
+    }
+
+    function reloadSuspiciousWords() {
+      if (suspiciousTextarea.value !== originalSuspiciousContent) {
+        if (!confirm('You have unsaved changes. Reload anyway?')) {
+          return;
+        }
+      }
+      loadSuspiciousWords();
+    }
+
+    // Count non-blank, non-comment lines (words may have inline # comments; strip those first).
+    function updateSuspiciousCount() {
+      const lines = suspiciousTextarea.value.split('\n');
+      const words = lines.filter(line => {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith('#')) return false;
+        const word = trimmed.split('#')[0].trim();
+        return word !== '';
+      });
+      suspiciousCount.textContent = `${words.length} words`;
+    }
+
+    // Display a status message below the suspicious words textarea and clear it after 3 seconds.
+    function showSuspiciousStatus(message, type) {
+      suspiciousStatus.textContent = message;
+      suspiciousStatus.className = 'status ' + type;
+
+      if (message && type) {
+        setTimeout(() => {
+          suspiciousStatus.textContent = '';
+          suspiciousStatus.className = 'status';
+        }, 3000);
+      }
+    }
+
+    saveSuspiciousBtn.addEventListener('click', saveSuspiciousWords);
+    reloadSuspiciousBtn.addEventListener('click', reloadSuspiciousWords);
+    suspiciousTextarea.addEventListener('input', updateSuspiciousCount);
+
+    // Warn if either section has unsaved changes. The two beforeunload listeners coexist
+    // because each independently handles its own section; both must fire.
+    window.addEventListener('beforeunload', (e) => {
+      if (textarea.value !== originalContent || suspiciousTextarea.value !== originalSuspiciousContent) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    });
+  </script>
+</body>
+</html>

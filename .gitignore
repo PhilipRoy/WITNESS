@@ -1,0 +1,29 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# macOS
+.DS_Store
+
+# Temporary audio files created during interviews
+frontend/temp_audio/
+
+# Voice model files (large binary files — download separately; see backend/models/audio/tts/piper-voices/README.md)
+*.onnx
+*.onnx.json
+*.bin
+
+# Faster-Whisper STT model files (downloaded automatically on first run — large binary files)
+backend/models/audio/stt/whisper/models--*/
+
+# Log files
+*.log
+
+# Environment variable files
+.env
+
+# Claude Code internal files
+.claude/

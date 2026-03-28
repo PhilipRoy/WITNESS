@@ -1,0 +1,323 @@
+<!--
+  W.I.T.N.E.S.S. - Web-based Interrogation and Testimony via a Neural Engaged Speech System
+  Copyright (C) 2026 Philip Roy <https://www.bluengrey.com>
+
+  This program is free software: you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation, either version 3 of the License, or
+  (at your option) any later version.
+
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+  GNU General Public License for more details.
+
+  You should have received a copy of the GNU General Public License
+  along with this program. If not, see <https://www.gnu.org/licenses/>.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>W.I.T.N.E.S.S. - Home</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body class="fade-in">
+  <div class="top-spacer"></div>
+  <div style="display: grid; place-items: center;">
+    <img src="images/WITNESS-banner-home.png" width="251" height="251" alt="W.I.T.N.E.S.S. - Web-based Interrogation and Testimony via a Neural Engaged Speech System" class="page-banner"/>
+  </div>
+
+  <div class="persona-options top-row">
+    <div class="persona-option">
+      <h2><em>Conduct Interview</em></h2>
+      <img src="images/WITNESS-button-conduct-interview.png" width="260" height="260" alt="Conduct Interview" class="option-image" id="conductBtn" />
+      <p>Click here to load an existing persona, check details and confirm you have selected the correct one. You can then proceed with the interview.</p>
+    </div>
+    <div class="persona-option">
+      <h2><em>Create Persona</em></h2>
+      <img src="images/WITNESS-button-create-persona.png" width="260" height="260" alt="Create Persona" class="option-image" id="createBtn" />
+      <p>Click here to create a new persona and save the persona file to your computer.</p>
+    </div>
+    <div class="persona-option">
+      <h2><em>Edit Persona</em></h2>
+      <img src="images/WITNESS-button-edit-persona.png" width="260" height="260" alt="Edit Persona" class="option-image" id="editBtn" />
+      <p>Click here to load an existing persona to edit it. You can export the updated persona file to your computer.</p>
+    </div>
+  </div>
+
+  <div class="persona-options second-row hidden-row">
+    <div class="persona-option">
+      <div id="persona-info" class="persona-highlight conduct-aligned" style="text-align: left;"></div>
+      <div id="persona-actions" class="conduct-aligned" style="margin-top: 0px;"></div>
+    </div>
+    <div class="persona-option"></div>
+    <div class="persona-option">
+      <div id="editWarning" class="edit-aligned"></div>
+    </div>
+  </div>
+
+  <input accept=".json" id="fileInput" type="file" style="display:none;" />
+
+<script>
+function startInterview() {
+  // Trigger CSS fade-out animation, then navigate — gives a polished transition
+  document.body.classList.add("fade-out");
+  setTimeout(() => {
+    window.location.href = "conduct-interview.html";
+  }, 400);
+}
+
+let loadedPersona = null;
+let currentAction = null; // tracks whether the user clicked "load" (Conduct) or "edit"
+let selectedFile = null;
+
+document.addEventListener("DOMContentLoaded", function () {
+  const conductBtn = document.getElementById("conductBtn");
+  const editBtn = document.getElementById("editBtn");
+  const createBtn = document.getElementById("createBtn");
+  const fileInput = document.getElementById("fileInput");
+
+  const personaInfo = document.getElementById("persona-info");
+  const personaActions = document.getElementById("persona-actions");
+  const editWarning = document.getElementById("editWarning");
+  const secondRow = document.querySelector(".second-row");
+
+  // A single hidden file input is shared for both Conduct and Edit flows;
+  // currentAction determines what happens after the file is selected.
+  conductBtn.addEventListener("click", () => {
+    currentAction = "load";
+    clearConductDisplay();
+    fileInput.click();
+  });
+
+  editBtn.addEventListener("click", () => {
+    currentAction = "edit";
+    clearEditWarning();
+    fileInput.click();
+  });
+
+  createBtn.addEventListener("click", () => {
+    window.location.href = "create-persona.html";
+  });
+
+  fileInput.addEventListener("change", async function (e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    selectedFile = file;
+    const formData = new FormData();
+    formData.append("file", file);
+
+    // Upload the file to the backend for validation before allowing the user to proceed.
+    // The backend runs a 4-stage check: schema, all-empty, key fields, and optional field coverage.
+    try {
+      const response = await fetch("/api/validate-persona", {
+        method: "POST",
+        body: formData
+      });
+
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.detail || "Unknown error");
+
+      if (currentAction === "load") {
+        loadedPersona = result;
+        sessionStorage.setItem("persona", JSON.stringify(loadedPersona));
+
+        const formattedDOB = new Date(result.date_of_birth).toLocaleDateString("en-NZ", {
+          day: "numeric",
+          month: "long",
+          year: "numeric"
+        });
+
+        let html = `
+          <b>Name:</b> ${result.full_name}<br>
+          <b>Date of Birth:</b> ${formattedDOB}<br>
+          <b>Home Address:</b> ${result.home_address}<br><br>
+          Check that this is the correct witness to interview and then click "Proceed."
+        `;
+
+        if (result.warning) {
+          html += `<div class="validation-warning">This W.I.T.N.E.S.S. persona file is lacking detail. The interview may feel limited or unrealistic.</div>`;
+        }
+
+        if (result.spelling_warnings && result.spelling_warnings.length > 0) {
+          html += `<div class="validation-warning" style="margin-top: 10px;">`;
+          html += `<b>Possible spelling errors detected:</b><br><br>`;
+          result.spelling_warnings.forEach(warn => {
+            html += `• ${warn.field}: "${warn.word}"<br>`;
+          });
+          html += `</div>`;
+        }
+
+        personaInfo.innerHTML = html;
+        personaInfo.classList.add("visible");
+        personaActions.innerHTML = `
+          <div class="button-row conduct-aligned">
+            <button class="proceed-btn" onclick="startInterview()">Proceed</button>
+            <button class="cancel-btn" id="conduct-cancel-btn">Cancel</button>
+          </div>
+        `;
+        personaActions.classList.add("visible");
+        secondRow.classList.remove("hidden-row");
+
+        // The persona is written to localStorage (not sessionStorage) so that
+        // conduct-interview.html can read it after the page navigation.
+        // sessionStorage does not survive cross-page navigation in all browsers.
+        localStorage.setItem("persona_data", JSON.stringify(loadedPersona));
+
+        document.getElementById("conduct-cancel-btn").addEventListener("click", clearConductDisplay);
+
+      } else if (currentAction === "edit") {
+        const hasSpellingWarnings = result.spelling_warnings && result.spelling_warnings.length > 0;
+
+        if (result.status === "valid_persona_file" && !hasSpellingWarnings) {
+          // Persona is clean — skip the warning step and go straight to the editor.
+          file.text().then(text => {
+            localStorage.setItem("persona_data", text);
+            window.location.href = "edit-persona.html";
+          });
+          return;
+        }
+
+        let message = "";
+        if (result.warning) {
+          message = "This W.I.T.N.E.S.S. persona file is lacking detail.<br><br>Add more information on the next screen to create a more realistic interview experience. Be sure to export the persona file after working on it in order to create a usable persona.";
+        } else if (hasSpellingWarnings && result.status === "valid_persona_file") {
+          message = "This persona file is valid but has some spelling issues you may want to review.";
+        } else {
+          message = "An unexpected issue occurred. Please check the persona file.";
+        }
+
+        let spellingWarningsHtml = "";
+        if (hasSpellingWarnings) {
+          spellingWarningsHtml = `<div class="validation-warning" style="margin-top: 10px;">`;
+          spellingWarningsHtml += `<b>Possible spelling errors detected:</b><br><br>`;
+          result.spelling_warnings.forEach(warn => {
+            spellingWarningsHtml += `• ${warn.field}: "${warn.word}"<br>`;
+          });
+          spellingWarningsHtml += `</div>`;
+        }
+
+        editWarning.innerHTML = `
+          <div class="edit-aligned">
+            <div class="validation-warning">${message}</div>
+            ${spellingWarningsHtml}
+            <div class="button-row">
+              <button class="proceed-btn" id="edit-proceed-btn">Proceed</button>
+              <button class="cancel-btn" id="edit-cancel-btn">Cancel</button>
+            </div>
+          </div>
+        `;
+        // requestAnimationFrame ensures the dynamically inserted button is in the DOM
+        // before we try to attach the event listener to it.
+        requestAnimationFrame(() => {
+          const btn = document.getElementById("edit-proceed-btn");
+          if (btn) {
+            btn.addEventListener("click", function () {
+              const file = document.getElementById("fileInput").files[0];
+              if (file) {
+                file.text().then(text => {
+                  localStorage.setItem("persona_data", text);
+                  window.location.href = "edit-persona.html";
+                });
+              }
+            });
+          }
+        });
+        secondRow.classList.remove("hidden-row");
+
+        document.getElementById("edit-cancel-btn").addEventListener("click", clearEditWarning);
+      }
+
+    } catch (err) {
+      const detail = err.message.toLowerCase();
+      let message = "";
+
+      if (currentAction === "load") {
+        if (detail.includes("missing required fields") || detail.includes("key field empty")) {
+          message = "Sorry, this W.I.T.N.E.S.S. persona file is missing required fields and cannot be used.<br><br>To resolve this issue, edit the persona file (missing fields will be added in automatically) and export the new version.";
+        } else if (detail.includes("all fields empty")) {
+          message = "Sorry, this W.I.T.N.E.S.S. persona file has no information in it and cannot be used.<br><br>To resolve this issue, edit the persona file to add in information and export the new version.";
+        } else {
+          message = "An unknown validation error occurred. Please try a different persona file or check the file content.";
+        }
+
+        personaInfo.innerHTML = `<div class="validation-warning">${message}</div>`;
+        personaInfo.classList.add("visible");
+        personaActions.innerHTML = "";
+        personaActions.classList.remove("visible");
+        secondRow.classList.remove("hidden-row");
+
+      } else if (currentAction === "edit") {
+        if (detail.includes("missing required fields") || detail.includes("key field empty")) {
+          message = "This W.I.T.N.E.S.S. persona file is missing required fields.<br><br>These fields will be added to the persona on the next screen. Be sure to export the persona file after working on it, in order to create a usable persona.";
+        } else if (detail.includes("all fields empty")) {
+          message = "This W.I.T.N.E.S.S. persona file has no information in it.<br><br>Add the information that you need in order to create a valid persona on the next screen. Be sure to export the persona file after working on it in order to create a usable persona.";
+        } else {
+          message = "An unexpected error occurred during validation.";
+        }
+
+        // The Edit flow always allows the user to proceed even when validation fails,
+        // because edit-persona.html will automatically add any missing fields from
+        // the template. This is by design — editing an incomplete file is how you fix it.
+        editWarning.innerHTML = `
+          <div class="edit-aligned">
+            <div class="validation-warning">${message}</div>
+            <div class="button-row">
+              <button class="proceed-btn" id="edit-proceed-btn">Proceed</button>
+              <button class="cancel-btn" id="edit-cancel-btn">Cancel</button>
+            </div>
+          </div>
+        `;
+        requestAnimationFrame(() => {
+          const btn = document.getElementById("edit-proceed-btn");
+          if (btn) {
+            btn.addEventListener("click", function () {
+              const file = document.getElementById("fileInput").files[0];
+              if (file) {
+                file.text().then(text => {
+                  localStorage.setItem("persona_data", text);
+                  window.location.href = "edit-persona.html";
+                });
+              }
+            });
+          }
+        });
+        secondRow.classList.remove("hidden-row");
+
+        document.getElementById("edit-cancel-btn").addEventListener("click", clearEditWarning);
+      }
+    }
+  });
+
+
+  function clearConductDisplay() {
+    personaInfo.innerHTML = "";
+    personaInfo.classList.remove("visible");
+    personaActions.innerHTML = "";
+    personaActions.classList.remove("visible");
+    editWarning.innerHTML = "";
+    secondRow.classList.add("hidden-row");
+  }
+
+  function clearEditWarning() {
+    editWarning.innerHTML = "";
+    personaInfo.innerHTML = "";
+    personaActions.innerHTML = "";
+    personaActions.classList.remove("visible");
+    secondRow.classList.add("hidden-row");
+  }
+
+  function proceedToEdit() {
+    if (selectedFile) {
+      selectedFile.text().then(text => {
+        localStorage.setItem("persona_data", text);
+        window.location.href = "edit-persona.html";
+      });
+    }
+  }
+});
+</script>
+</body>
+</html>

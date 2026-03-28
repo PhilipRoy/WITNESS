@@ -1,0 +1,87 @@
+{
+  "persona_type": "",
+  "persona_voice_model": "",
+  "persona_voice_speaker_id": "",
+  "full_name": "",
+  "date_of_birth": "",
+  "home_address": "",
+  "interview_instructions": "",
+  "persona_prompt": "",
+
+  "employed_by": "",
+  "occupation": "",
+  "business_address": "",
+  "home_phone": "",
+  "work_phone": "",
+  "cell_phone": "",
+  "ethnicity": "",
+  "gender": "",
+  "email": "",
+  "social_networking": "",
+
+  "facts_to_provide": [
+    {
+      "fact": "",
+      "certainty": "",
+      "reason": ""
+    },
+    {
+      "fact": "",
+      "certainty": "",
+      "reason": ""
+    },
+    {
+      "fact": "",
+      "certainty": "",
+      "reason": ""
+    },
+    {
+      "fact": "",
+      "certainty": "",
+      "reason": ""
+    },
+    {
+      "fact": "",
+      "certainty": "",
+      "reason": ""
+    },
+    {
+      "fact": "",
+      "certainty": "",
+      "reason": ""
+    },
+    {
+      "fact": "",
+      "certainty": "",
+      "reason": ""
+    },
+    {
+      "fact": "",
+      "certainty": "",
+      "reason": ""
+    },
+    {
+      "fact": "",
+      "certainty": "",
+      "reason": ""
+    },
+    {
+      "fact": "",
+      "certainty": "",
+      "reason": ""
+    }
+  ],
+
+  "speaking_speed": "",
+  "speaking_tone": "",
+  "speaking_accent": "",
+  "vocal_quirks": "",
+
+  "interaction_style": "",
+  "emotional_state": "",
+  "level_of_education": "",
+  "trust_in_authority": "",
+
+  "trigger_topics": ["", "", "", "", "", ""],
+  "hidden_motivations": ["", "", "", "", "", ""]
+}

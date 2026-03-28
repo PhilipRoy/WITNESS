@@ -1,0 +1,643 @@
+<!--
+  W.I.T.N.E.S.S. - Web-based Interrogation and Testimony via a Neural Engaged Speech System
+  Copyright (C) 2026 Philip Roy <https://www.bluengrey.com>
+
+  This program is free software: you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation, either version 3 of the License, or
+  (at your option) any later version.
+
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+  GNU General Public License for more details.
+
+  You should have received a copy of the GNU General Public License
+  along with this program. If not, see <https://www.gnu.org/licenses/>.
+-->
+<!--
+  Create Persona page — builds a new persona JSON file from scratch using a form
+  generated from the persona template fetched from the backend. The form is created
+  entirely in JavaScript because the field structure is driven by the template, not
+  hard-coded in HTML.
+-->
+  <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>W.I.T.N.E.S.S. - Create Persona</title>
+    <link rel="stylesheet" href="styles.css">
+
+</head>
+<body class="fade-in">
+<div class="top-bar justify-between">
+    <div class="icon-button" onclick="handleHomeClick()" title="Go Home">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M3 9.75L12 3l9 6.75V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1V9.75z"/>
+      </svg>
+    </div>
+    
+  </div>
+  
+  
+<p align="center"><img src="images/WITNESS-banner-create-persona.png" width="251" height="251" alt="W.I.T.N.E.S.S. - Create a Persona" class="page-banner"/></p>
+
+<div class="intro">
+<p>Persona files <strong>*must*</strong> include the persona type (witness or suspect), full name, date of birth, home address, interview instructions and persona prompt, in order to be considered a valid file. Other details that you add in here will make the interview more realistic and rewarding for those that conduct an interview using this persona.</p>
+<p>If you leave significant details out from the persona file, there is no guarantee that the interview will flow well or produce realistic results. Take time and care with the details you provide. Be sure to test the persona file using the <b>Conduct Interview</b> feature on the Home page, then use <b>Edit Persona</b> to make any adjustments necessary to achieve a realistic interview outcome.</p>
+</div>
+    
+<form id="personaForm" style="padding: 20px;"></form>
+
+<div class="button-row" style="text-align: center; margin-top: 30px;">
+  <button type="button" class="proceed-btn" onclick="exportPersona()">Export Persona</button>
+  <button type="button" class="cancel-btn" onclick="handleHomeClick()" style="margin-left: 12px;">Cancel</button>
+</div>
+
+<script>
+// Tracks the form state at the time of the last export, used to detect unsaved changes on exit.
+let lastExportedData = null;
+
+// Fetch the persona template and available Piper voices in parallel before building the form.
+// The template defines the field structure; voices populate the voice selection dropdown.
+document.addEventListener("DOMContentLoaded", function () {
+  Promise.all([
+    fetch("/backend/persona-template").then(r => r.json()),
+    fetch("/api/piper-voices").then(r => r.json()).catch(() => [])
+  ]).then(([template, voices]) => {
+    const form = document.getElementById("personaForm");
+    // The 8 JSON fields that must be populated for the persona to be usable for an interview.
+    // Note: persona_voice_model and persona_voice_speaker_id are set together by a single
+    // voice dropdown, so the user experiences this as 7 fields to complete, not 8.
+    // These are highlighted in red in the form and block export if empty.
+    const keyFields = ["persona_type", "persona_voice_model", "persona_voice_speaker_id", "full_name", "date_of_birth", "home_address", "interview_instructions", "persona_prompt"];
+
+    // Build the voice dropdown from the API response.
+    // The voices metadata JSON has evolved over time and uses inconsistent field names
+    // across different versions. We try a prioritised list of known keys first, then
+    // fall back to scanning all string values for anything ending in ".onnx".
+    const voiceOptions = voices.map(row => {
+      let filename = "";
+      const filenameKeys = ["filename", "model_filename", "onnx", "voice_file", "file", "model"];
+      for (const k of filenameKeys) {
+        if (!filename && row[k]) filename = String(row[k]).trim();
+      }
+      if (!filename) {
+        for (const val of Object.values(row)) {
+          if (typeof val === "string" && val.toLowerCase().trim().endsWith(".onnx")) {
+            filename = val.trim();
+            break;
+          }
+        }
+      }
+      const name   = row.name || row.Name || row.display_name || row.speaker || "Voice";
+      const gender = row.gender || row.Gender || "";
+      const accent = row.accent || row.Accent || row.locale || "";
+      const speaker_id = (row.speaker_id ?? row.spk_id ?? "").toString().trim();
+      return {
+        filename,
+        label: [name, gender, accent].filter(Boolean).join(" — "),
+        speaker_id: speaker_id || ""
+      };
+    }).filter(v => v.filename);
+
+    const radioOptions = {
+      persona_type: ["Witness", "Suspect"],
+      gender: ["Male", "Female", "Transgender", "Non-Binary"],
+      speaking_speed: ["Moderate", "Fast", "Slow"],
+      speaking_tone: ["High-pitched", "Normal", "Flat", "Gravelly"],
+      speaking_accent: ["New Zealand", "Australia", "English", "American", "South African", "Scottish"],
+      vocal_quirks: ["None", "Stutters slightly", "Slurs words when nervous", "Frequently clears throat"],
+      interaction_style: ["Cooperative", "Dismissive", "Hostile", "Evasive", "Chatty", "Passive"],
+      emotional_state: ["Calm", "Agitated", "Fearful", "Angry", "Anxious"],
+      level_of_education: ["No qualifications", "High school", "Graduate", "Post-Graduate", "Doctorate"],
+      trust_in_authority: ["High", "Medium", "Low"]
+    };
+
+    const fieldHelpText = {
+      date_of_birth: "Enter the Date of Birth in the format YYYY-MM-DD, e.g. 1980-05-22.",
+      interview_instructions: "The instructions that will be shown on screen for the person conducting the interview prior to it starting. Provide background and guidance concerning the activity you want them to complete.<br><br><b>For example</b> - Conduct an interview with Sally Ann Smith, a witness to an armed robbery that occurred on Johnson Street three days ago. When you begin the interview, a transcript of the conversation will appear on screen. When you end the interview, you will have the option to export the transcript as a Microsoft Word file.",
+      persona_prompt: "A description used to initialise the AI behaviour and tone before the interview starts. This helps set the stage for how the AI-based persona should respond.<br><br><b>Example</b> – You are Sally Ann Smith, a childcare worker from Hamilton. You witnessed an armed robbery three days ago on Johnson Street and are now speaking to a Police Officer about what you saw. You are nervous, but willing to help. Answer questions clearly, but do not volunteer unnecessary information.",
+      facts_to_provide: "These are specific facts that the persona knows. Write each fact from the persona's perspective (use \"I\" not \"you\"). Some facts will be shared confidently (Certain) and others may be sligthly vague (Unsure), or untrue for suspects (Lie). You can justify why the persona is certain/unsure/lying.<br><br>Enter up to 10 facts and try to keep them in chronological order related to the incident.<br><br><b>Example</b> – I only saw one person commit the robbery, with no one else involved – Certain : There was no one else present and I had a clear view.",
+      trigger_topics: "Topics that might evoke an emotional or evasive reaction, such as trauma, bias, or sensitive events. Unused fields should be left as \"None\".<br><br><b>Example</b> – Questions about your previous criminal record.",
+      hidden_motivations: "Desires, fears, or intentions that the persona does not reveal openly but which may influence their behaviour. Unused fields should be left as \"None\".<br><br><b>Example</b> – You are protecting a close friend who was somehow involved in the incident."
+    };
+
+    const noDefaultRadio = ["gender"];
+    const customDefaultRadio = {
+      speaking_tone: "Normal",
+      level_of_education: "High school",
+      trust_in_authority: "Medium"
+    };
+
+    for (const key in template) {
+      const container = document.createElement("div");
+      container.className = keyFields.includes(key) ? "field-container required-box" : "field-container";
+
+        // persona_voice_speaker_id is a companion field to persona_voice_model.
+      // It is stored as a hidden input (automatically set from the voice dropdown) and never shown directly —
+      // the user picks a voice by name, not by numeric speaker ID.
+      if (key === "persona_voice_speaker_id") {
+        if (!document.getElementById("persona_voice_speaker_id")) {
+          const hiddenSpeaker = document.createElement("input");
+          hiddenSpeaker.type = "hidden";
+          hiddenSpeaker.name = "persona_voice_speaker_id";
+          hiddenSpeaker.id = "persona_voice_speaker_id";
+          form.appendChild(hiddenSpeaker);
+        }
+        continue;
+      }
+
+      // Custom renderer for persona_voice_model
+      if (key === "persona_voice_model") {
+        const labelRow = document.createElement("div");
+        labelRow.className = "label-radio-row";
+
+        const mainLabel = document.createElement("label");
+        mainLabel.textContent = "Persona Voice";
+        labelRow.appendChild(mainLabel);
+
+        // Select (label shows Name — Gender — Accent; value is filename)
+        const select = document.createElement("select");
+        select.name = "persona_voice_model";
+        select.id = "persona_voice_model";
+        select.classList.add("slim-select");
+
+        // Ensure hidden field for speaker id exists
+        let hiddenSpeaker = document.getElementById("persona_voice_speaker_id");
+        if (!hiddenSpeaker) {
+          hiddenSpeaker = document.createElement("input");
+          hiddenSpeaker.type = "hidden";
+          hiddenSpeaker.name = "persona_voice_speaker_id";
+          hiddenSpeaker.id = "persona_voice_speaker_id";
+          // append to form so it is included in export
+          form.appendChild(hiddenSpeaker);
+        }
+
+        // Placeholder option so filename is never shown directly
+        const placeholder = document.createElement("option");
+        placeholder.value = "";
+        placeholder.textContent = "Select a voice…";
+        select.appendChild(placeholder);
+
+        voiceOptions.forEach(v => {
+          const opt = document.createElement("option");
+          opt.value = v.filename;                 // model filename is the VALUE
+          opt.textContent = v.label;              // label shown to user
+          opt.dataset.speakerId = v.speaker_id;   // used for preview (if present)
+          opt.dataset.voiceName = (v.label || "").split(" — ")[0] || "";
+          select.appendChild(opt);
+        });
+
+        // Pre-select the voice that was previously saved, if any.
+        // Multiple localStorage key names are tried for backwards compatibility with
+        // earlier versions of the app that stored the persona under different keys.
+        try {
+          const keys = ["currentPersona", "loadedPersona", "personaData", "selectedPersona"];
+          let preselect = "";
+          let preselectSpeaker = "";
+          for (const k of keys) {
+            const raw = localStorage.getItem(k);
+            if (raw) {
+              const obj = JSON.parse(raw);
+              if (obj && obj.persona_voice_model) {
+                preselect = obj.persona_voice_model;
+                preselectSpeaker = (obj.persona_voice_speaker_id !== undefined && obj.persona_voice_speaker_id !== null) ? String(obj.persona_voice_speaker_id) : "";
+                break;
+              }
+            }
+          }
+          if (preselect) {
+            select.value = preselect;
+            // If we have a matching option, take its speaker_id from dataset to ensure correctness
+            const selOpt = Array.from(select.options).find(o => o.value === preselect);
+            if (selOpt) {
+              hiddenSpeaker.value = selOpt.dataset.speakerId || preselectSpeaker || "0";
+            } else {
+              // fallback to any stored value (may be "0")
+              hiddenSpeaker.value = preselectSpeaker || "0";
+            }
+          }
+        } catch (e) { /* ignore */ }
+
+        select.addEventListener("change", () => {
+          const selected = select.options[select.selectedIndex];
+          hiddenSpeaker.value = selected && selected.dataset.speakerId ? selected.dataset.speakerId : "0";
+        });
+
+        // Speaker preview button: pulses red while the backend generates audio, then plays it inline.
+        const previewBtn = document.createElement("button");
+        previewBtn.type = "button";
+        previewBtn.className = "icon-button";
+        previewBtn.style.marginLeft = "12px";
+        previewBtn.title = "Preview voice";
+        previewBtn.classList.add("speaker-btn");
+        previewBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M3 10v4h4l5 5V5L7 10H3zm13.5 2a3.5 3.5 0 01-2 3.16v-6.32a3.5 3.5 0 012 3.16zm2.5 0c0-3.04-1.72-5.64-4.25-6.93v13.86C17.28 17.64 19 15.04 19 12z"/></svg>`;
+
+        previewBtn.addEventListener("click", async () => {
+          const selected = select.options[select.selectedIndex];
+          const file = selected ? selected.value : "";
+          if (!file) {
+            alert("Please choose a voice to preview.");
+            return;
+          }
+          const voiceName = selected.dataset.voiceName || "this voice";
+          const speakerId = selected.dataset.speakerId || "";
+
+          const text = `Hi, my name is ${voiceName}! Thank you for choosing this voice.`;
+
+          previewBtn.disabled = true;
+          previewBtn.classList.add("pulsing");
+          try {
+            const resp = await fetch("/api/play-voice", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ text, voice_file: file, speaker_id: speakerId })
+            });
+            if (!resp.ok) {
+              let errMsg = "Voice preview failed.";
+              try {
+                const errData = await resp.json();
+                if (errData && errData.detail) errMsg = errData.detail;
+              } catch {}
+              throw new Error(errMsg);
+            }
+            const blob = await resp.blob();
+            const url = URL.createObjectURL(blob);
+            const audio = new Audio(url);
+            audio.addEventListener("playing", () => previewBtn.classList.remove("pulsing"));
+            audio.addEventListener("ended", () => URL.revokeObjectURL(url));
+            audio.play();
+          } catch (e) {
+            console.error(e);
+            alert(e.message || "There was an error playing the voice preview.");
+          } finally {
+            previewBtn.disabled = false;
+            previewBtn.classList.remove("pulsing");
+          }
+        });
+
+        const controlGroup = document.createElement("div");
+        controlGroup.className = "radio-group";
+        controlGroup.appendChild(select);
+        controlGroup.appendChild(previewBtn);
+
+        labelRow.appendChild(controlGroup);
+        container.appendChild(labelRow);
+        form.appendChild(container);
+        continue; // skip default rendering for this key
+      }
+
+      if (radioOptions[key]) {
+        const labelRow = document.createElement("div");
+        labelRow.className = "label-radio-row";
+
+        const mainLabel = document.createElement("label");
+        mainLabel.textContent = key.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase());
+        labelRow.appendChild(mainLabel);
+
+        const group = document.createElement("div");
+        group.className = "radio-group";
+
+        radioOptions[key].forEach(option => {
+          const radio = document.createElement("input");
+          radio.type = "radio";
+          radio.name = key;
+          radio.value = option;
+
+          if (customDefaultRadio[key] === option) {
+            radio.checked = true;
+          } else if (!noDefaultRadio.includes(key) && !customDefaultRadio[key] && option === radioOptions[key][0]) {
+            radio.checked = true;
+          }
+
+          const radioLabel = document.createElement("label");
+          radioLabel.appendChild(radio);
+          radioLabel.appendChild(document.createTextNode(option));
+          group.appendChild(radioLabel);
+        });
+
+        labelRow.appendChild(group);
+        container.appendChild(labelRow);
+      } else {
+        const textLabel = document.createElement("label");
+        textLabel.textContent = key.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase());
+        container.appendChild(textLabel);
+
+        if (fieldHelpText[key]) {
+          const help = document.createElement("div");
+          help.className = "field-instructions";
+          help.innerHTML = fieldHelpText[key];
+          container.appendChild(help);
+        }
+
+        if (key === "interview_instructions" || key === "persona_prompt") {
+          const textarea = document.createElement("textarea");
+          textarea.name = key;
+          textarea.rows = 8;
+          container.appendChild(textarea);
+        } else if (key === "facts_to_provide") {
+          for (let i = 0; i < 10; i++) {
+            const factRow = document.createElement("div");
+            factRow.className = "fact-row";
+
+            const factInput = document.createElement("input");
+            factInput.type = "text";
+            factInput.name = `${key}[${i}].fact`;
+            factInput.value = "None";
+            factInput.placeholder = "Enter fact here...";
+
+            const metadataRow = document.createElement("div");
+            metadataRow.className = "fact-metadata-row";
+
+            const certaintyGroup = document.createElement("div");
+            certaintyGroup.className = "radio-group";
+            certaintyGroup.id = `certainty-group-${i}`;
+
+            // Start with just Certain/Unsure. If the user selects "Suspect" as persona type,
+        // a "Lie" option will be added by updateCertaintyOptions() — suspects can provide false facts.
+            ["Certain", "Unsure"].forEach(cert => {
+              const radio = document.createElement("input");
+              radio.type = "radio";
+              radio.name = `${key}[${i}].certainty`;
+              radio.value = cert;
+              if (cert === "Certain") radio.checked = true;
+
+              const lbl = document.createElement("label");
+              lbl.appendChild(radio);
+              lbl.appendChild(document.createTextNode(cert));
+              certaintyGroup.appendChild(lbl);
+            });
+
+            const reasonInput = document.createElement("input");
+            reasonInput.type = "text";
+            reasonInput.name = `${key}[${i}].reason`;
+            reasonInput.placeholder = "Optional: context or reason (e.g., 'was dark', 'protecting friend')";
+
+            metadataRow.appendChild(certaintyGroup);
+            metadataRow.appendChild(reasonInput);
+
+            factRow.appendChild(factInput);
+            factRow.appendChild(metadataRow);
+            container.appendChild(factRow);
+          }
+
+            // Rebuild certainty options whenever persona_type changes, so Suspects get the "Lie" option.
+          const personaTypeRadios = document.querySelectorAll('input[name="persona_type"]');
+          personaTypeRadios.forEach(radio => {
+            radio.addEventListener("change", () => {
+              updateCertaintyOptions(radio.value);
+            });
+          });
+
+          const defaultType = document.querySelector('input[name="persona_type"]:checked');
+          if (defaultType) {
+            updateCertaintyOptions(defaultType.value);
+          }
+        } else if (key === "trigger_topics" || key === "hidden_motivations") {
+          for (let i = 0; i < 6; i++) {
+            const input = document.createElement("input");
+            input.type = "text";
+            input.name = `${key}[${i}]`;
+            input.value = "None";
+            container.appendChild(input);
+          }
+        } else {
+          const input = document.createElement("input");
+          input.type = "text";
+          input.name = key;
+          container.appendChild(input);
+        }
+      }
+
+      form.appendChild(container);
+    }
+
+    lastExportedData = JSON.parse(JSON.stringify(serializeForm()));
+  });
+});
+
+// Rebuilds the certainty radio buttons for all 10 fact rows based on persona type.
+// Witnesses can only be Certain or Unsure; Suspects get an additional "Lie" option.
+// Called when persona_type changes, or on initial load to match any pre-selected type.
+function updateCertaintyOptions(personaType) {
+  for (let i = 0; i < 10; i++) {
+    const group = document.getElementById(`certainty-group-${i}`);
+    if (!group) continue;
+
+    const currentValue = document.querySelector(`input[name="facts_to_provide[${i}].certainty"]:checked`)?.value || "Certain";
+
+    group.innerHTML = "";
+
+    const options = personaType === "Suspect" ? ["Certain", "Unsure", "Lie"] : ["Certain", "Unsure"];
+
+    options.forEach(cert => {
+      const radio = document.createElement("input");
+      radio.type = "radio";
+      radio.name = `facts_to_provide[${i}].certainty`;
+      radio.value = cert;
+
+      // Preserve the existing selection when rebuilding; if the current value is no longer valid
+      // (e.g., "Lie" when switching back to Witness), fall back to Certain.
+      if (cert === currentValue || (currentValue === "Lie" && personaType !== "Suspect" && cert === "Certain")) {
+        radio.checked = true;
+      } else if (!options.includes(currentValue) && cert === "Certain") {
+        radio.checked = true;
+      }
+
+      const lbl = document.createElement("label");
+      lbl.appendChild(radio);
+      lbl.appendChild(document.createTextNode(cert));
+      group.appendChild(lbl);
+    });
+  }
+}
+
+function exportPersona() {
+  const keyFields = ["persona_type", "persona_voice_model", "persona_voice_speaker_id", "full_name", "date_of_birth", "home_address", "interview_instructions", "persona_prompt"];
+  const missing = [];
+
+  // Voice model and speaker ID share a single dropdown in the UI, so they are
+  // validated together under the label "Persona Voice" rather than individually.
+  keyFields.forEach(id => {
+    if (id === "persona_voice_model" || id === "persona_voice_speaker_id") return;
+    const input = document.querySelector(`[name='${id}']`);
+    if (input && input.value.trim() === "") {
+      missing.push(id.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase()));
+    }
+  });
+
+  const selectedVoice = document.getElementById("persona_voice_model").value;
+  const selectedVoiceOption = document.querySelector("#persona_voice_model option:checked");
+  const currentSpeakerId = document.getElementById("persona_voice_speaker_id").value;
+
+  if (!selectedVoice) {
+      missing.push("Persona Voice");
+  } else {
+      // If a voice is selected but the speaker ID hidden field was not populated (edge case),
+      // read it from the selected option's data attribute and default to "0" if absent.
+      if (!currentSpeakerId) {
+          document.getElementById("persona_voice_speaker_id").value = selectedVoiceOption ? (selectedVoiceOption.getAttribute("data-speaker-id") || "0") : "0";
+      }
+  }
+
+  const dobInput = document.querySelector("[name='date_of_birth']");
+  if (dobInput) {
+    const dobValue = dobInput.value.trim();
+    const dobPattern = /^\d{4}-\d{2}-\d{2}$/;
+    if (dobValue !== "" && !dobPattern.test(dobValue)) {
+      alert("⚠️ The Date of Birth must be in the format YYYY-MM-DD.\n\nPlease correct this before exporting the persona file.");
+      return;
+    }
+  }
+
+  if (missing.length > 0) {
+    alert("⚠️ The following fields must be completed before you can export this persona:\n\n" + missing.map(f => `• ${f}`).join("\n"));
+    return;
+  }
+
+  // Warn if more than half the fact slots are still empty or "None".
+  // The LLM relies on these facts to give grounded answers; sparse facts lead to
+  // vague, repetitive, or invented responses during the interview.
+  {
+    const formData = new FormData(document.getElementById("personaForm"));
+    const facts = [];
+    for (let i = 0; i < 10; i++) {
+      const fact = formData.get(`facts_to_provide[${i}].fact`) || "None";
+      facts.push(fact.trim());
+    }
+    const emptyFactsCount = facts.filter(f => f === "" || f === "None").length;
+    if (emptyFactsCount >= 5) {
+      const proceed = confirm("⚠️ This persona file lacks sufficient detail.\nTHE INTERVIEW MAY NOT PRODUCE REALISTIC RESULTS.\n\nClick Cancel to stay on this page.\nClick OK to export the file.");
+      if (!proceed) return;
+    }
+  }
+
+  fetch("/backend/persona-template")
+    .then(res => res.json())
+    .then(async template => {
+      const formData = new FormData(document.getElementById("personaForm"));
+      const output = {};
+
+      for (const key in template) {
+        if (Array.isArray(template[key])) {
+          if (key === "facts_to_provide") {
+            const facts = [];
+            for (let i = 0; i < 10; i++) {
+              const fact = formData.get(`${key}[${i}].fact`) || "None";
+              const certainty = formData.get(`${key}[${i}].certainty`) || "Certain";
+              const reason = formData.get(`${key}[${i}].reason`) || "";
+              facts.push({ fact, certainty, reason });
+            }
+            output[key] = facts;
+          } else {
+            const values = [];
+            for (let i = 0; i < 6; i++) {
+              values.push(formData.get(`${key}[${i}]`) || "None");
+            }
+            output[key] = values;
+          }
+        } else {
+          output[key] = formData.get(key) || "";
+        }
+      }
+
+      // Curly (smart) quotes typed on macOS/iOS can cause issues in JSON files and downstream
+      // spell-checking. Normalise all quotes to straight ASCII equivalents before writing to disk.
+      function normalizeQuotes(obj) {
+        if (typeof obj === 'string') {
+          return obj
+            .replace(/[\u2018\u2019]/g, "'")
+            .replace(/[\u201C\u201D]/g, '"');
+        } else if (Array.isArray(obj)) {
+          return obj.map(normalizeQuotes);
+        } else if (obj !== null && typeof obj === 'object') {
+          const normalized = {};
+          for (const key in obj) {
+            normalized[key] = normalizeQuotes(obj[key]);
+          }
+          return normalized;
+        }
+        return obj;
+      }
+
+      const normalizedOutput = normalizeQuotes(output);
+
+      const name = (normalizedOutput.full_name || "Persona").replace(/\s+/g, "-");
+      const dob = (normalizedOutput.date_of_birth || "Unknown").replace(/\//g, "-");
+      const fileName = `${name}-${dob}.json`;
+      const fileContents = JSON.stringify(normalizedOutput, null, 2);
+
+      // Use the modern File System Access API where available (Chrome, Edge).
+      // This presents a native Save dialog so the user can choose where to save the file.
+      // Firefox and Safari do not support this API, so they fall back to a simulated
+      // anchor-click download that saves to the browser's default downloads folder.
+      if (window.showSaveFilePicker) {
+        try {
+          const handle = await window.showSaveFilePicker({
+            suggestedName: fileName,
+            types: [{ description: "JSON File", accept: { "application/json": [".json"] } }]
+          });
+          const writable = await handle.createWritable();
+          await writable.write(fileContents);
+          await writable.close();
+          lastExportedData = serializeForm();
+        } catch {
+          alert("File save was cancelled or failed.");
+        }
+      } else {
+        // Fallback for browsers without File System Access API.
+        const blob = new Blob([fileContents], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = fileName;
+        a.click();
+        URL.revokeObjectURL(url);
+        lastExportedData = serializeForm();
+      }
+    });
+}
+
+// Custom home navigation that warns the user if they have unsaved changes.
+// This mirrors the browser's own beforeunload prompt but gives a clearer message.
+function handleHomeClick() {
+  const currentData = serializeForm();
+  if (lastExportedData && JSON.stringify(currentData) !== JSON.stringify(lastExportedData)) {
+    const proceed = confirm("⚠️ You have made changes but have not exported the persona file.\n\nClick OK to stay on this page and export your work.\nClick Cancel to leave without saving.");
+    if (!proceed) window.location.href = 'index.html';
+  } else {
+    window.location.href = 'index.html';
+  }
+}
+
+// Catch page refresh or browser back/close with unsaved changes.
+// Note: browsers may not show the custom message — they display their own generic prompt instead.
+window.addEventListener("beforeunload", function (e) {
+  const currentData = serializeForm();
+  if (lastExportedData && JSON.stringify(currentData) !== JSON.stringify(lastExportedData)) {
+    e.preventDefault();
+    e.returnValue = "You have unsaved changes.";
+    return "You have unsaved changes.";
+  }
+});
+
+function serializeForm() {
+  const form = document.getElementById("personaForm");
+  const data = {};
+  new FormData(form).forEach((value, key) => {
+    if (key.includes("[")) {
+      const [arrayKey, rest] = key.split("[");
+      if (!data[arrayKey]) data[arrayKey] = [];
+      const index = parseInt(rest);
+      data[arrayKey][index] = value;
+    } else {
+      data[key] = value;
+    }
+  });
+  return data;
+}
+</script>
+
+</body>
+</html>

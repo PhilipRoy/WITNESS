@@ -1,0 +1,1333 @@
+<!--
+  W.I.T.N.E.S.S. - Web-based Interrogation and Testimony via a Neural Engaged Speech System
+  Copyright (C) 2026 Philip Roy <https://www.bluengrey.com>
+
+  This program is free software: you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation, either version 3 of the License, or
+  (at your option) any later version.
+
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+  GNU General Public License for more details.
+
+  You should have received a copy of the GNU General Public License
+  along with this program. If not, see <https://www.gnu.org/licenses/>.
+-->
+<!--
+  Conduct Interview page — the main interview interface. The interviewer can speak to
+  the AI persona in text mode (keyboard) or voice mode (microphone hold-to-talk).
+
+  Key design decisions:
+  - The backend is stateless: the full chatHistory array is sent with every /api/chat
+    request; the server holds no conversation state between calls.
+  - In voice mode the response from /api/chat is a WAV audio blob in the HTTP response
+    body. The transcript text is returned separately, Base64-encoded in the custom
+    response header "X-Reply-Text-Base64". This avoids multipart responses.
+  - TTS audio is queued through _ttsQueue/_ttsPlaying to prevent clips overlapping.
+  - Persona data is read from localStorage on every request in case it was updated.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title>W.I.T.N.E.S.S. - Conduct Interview</title>
+    <link rel="stylesheet" href="styles.css">
+
+</head>
+<body class="fade-in">
+<div class="interview-flex-layout">
+  <div class="interview-top-area">
+<div class="top-bar justify-between">
+    <div class="icon-button" onclick="handleHomeClick()" title="Go Home">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M3 9.75L12 3l9 6.75V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1V9.75z"/>
+      </svg>
+    </div>
+  </div>
+
+
+<p align="center"><img src="images/WITNESS-banner-conduct-interview.png" width="251" height="251" alt="W.I.T.N.E.S.S. - Conduct Interview" class="page-banner"/></p>
+
+<h2 class="interview-heading" id="interviewHeading">
+  Interview with [Persona Name] conducted on [Local Date]
+</h2>
+
+
+<p class="interview-instructions" id="interviewInstructions">
+  [Interview instructions will appear here.]
+</p>
+
+<div id="systemStatus" class="system-status fade-pulse">Preparing A.I. persona…</div>
+<div id="status-subtext" class="status-subtext"></div>
+
+<div id="voiceError" class="inline-voice-error" style="display:none; color:#ff4d4d; font-weight:bold; margin: 0 40px 10px;"></div>
+<div class="button-row conduct-button-row">
+  <button class="segmented-start-button" onclick="handleSegmentedClick(event)">
+    <span class="left-icon" title="Start Text Interview">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="currentColor">
+        <path d="M256 32C114.6 32 0 125.1 0 240c0 49.6 24.5 95.2 65.5 131.5C56.9 413.3 26.5 445.1 26.2 445.4a16 16 0 0 0 12.1 26.6c61.6 0 110.4-25.8 139.5-46.6c24.3 5.6 50.1 8.6 77.2 8.6c141.4 0 256-93.1 256-208S397.4 32 256 32z"/>
+      </svg>
+    </span>
+    <span class="start-text">START Interview</span>
+    <span class="right-icon" title="Start Voice Interview">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512" fill="currentColor">
+        <path d="M192 352c53 0 96-43 96-96V96c0-53-43-96-96-96S96 43 96 96v160c0 53 43 96 96 96zm176-112c0-13.3-10.7-24-24-24s-24 10.7-24 24c0 88.2-71.8 160-160 160S0 328.2 0 240c0-13.3-10.7-24-24-24s-24 10.7-24 24c0 104.6 79.8 190.7 180 206.4V488H104c-13.3 0-24 10.7-24 24s10.7 24 24 24h176c13.3 0 24-10.7 24-24s-10.7-24-24-24h-52v-41.6c100.2-15.7 180-101.8 180-206.4z"/>
+      </svg>
+    </span>
+  </button>
+  <button type="button" class="cancel-btn" onclick="handleHomeClick()" style="display: inline-block;">Cancel</button>
+</div>
+
+<div id="chatContainer" class="chat-container">
+  <div id="textInputRow" class="text-input-row" style="display: none;">
+    <input type="text" id="chatInput" placeholder="Type your question here and press ENTER..." class="chat-input">
+    <button id="sendBtn" class="send-btn">Send</button>
+  </div>
+  <button id="voiceInputBtn" class="voice-input-button" onmousedown="startListening()" onmouseup="stopListening()" onmouseleave="stopListening()" style="display: none;">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512" fill="currentColor" width="24" height="24">
+      <path d="M192 352c53 0 96-43 96-96V96c0-53-43-96-96-96S96 43 96 96v160c0 53 43 96 96 96zm176-112c0-13.3-10.7-24-24-24s-24 10.7-24 24c0 88.2-71.8 160-160 160S0 328.2 0 240c0-13.3-10.7-24-24-24s-24 10.7-24 24c0 104.6 79.8 190.7 180 206.4V488H104c-13.3 0-24 10.7-24 24s10.7 24 24 24h176c13.3 0 24-10.7 24-24s-10.7-24-24-24h-52v-41.6c100.2-15.7 180-101.8 180-206.4z"/>
+    </svg>
+    <span class="voice-input-label">Press to talk</span>
+  </button>
+  <div id="thinkingMessage" class="thinking-message fade-pulse" style="display: none;">Thinking...</div>
+</div>
+
+  </div>
+  <div class="transcript-spacer"></div>
+  <div id="transcriptContainer" class="scrolling-transcript">
+    <div class="transcript-wrapper">
+      <div id="transcriptArea" class="transcript-area"></div>
+    </div>
+  </div>
+
+<script>
+  // chatHistory is the full conversation sent to the backend on every request.
+  // The backend is stateless, so the entire history must be included each time.
+  let chatHistory = [];
+
+  // A single persistent <audio> element is reused for all TTS playback.
+  // Audio responses are queued so they play sequentially rather than overlapping.
+  let _ttsPlayer = null;
+  let _ttsQueue = [];
+  let _ttsPlaying = false;
+
+  // Alternative Web Audio API playback path. Disabled by default because the standard
+  // HTMLAudio element is more widely compatible. Can be enabled at runtime via the
+  // browser console (USE_WEBAUDIO = true) for debugging audio issues.
+  let USE_WEBAUDIO = false;
+  let _waQueue = [];
+  let _waPlaying = false;
+  let _waGain = 1.2; // slight volume boost for voices that are quiet at 1.0
+
+  // Holds the active microphone MediaStream between recordings so we can stop all tracks
+  // when recording ends. Browsers keep the microphone-in-use indicator lit for as long
+  // as any track from the stream remains active, so releasing it promptly is important.
+let micStream = null;
+
+  function ensureAudioContext() {
+    if (!_audioCtx) {
+      try { _audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { _audioCtx = null; }
+    }
+    return _audioCtx;
+  }
+
+  async function _waPlayNext() {
+    if (_waPlaying || _waQueue.length === 0) return;
+    const ctx = ensureAudioContext();
+    if (!ctx) { console.warn("[Audio][WA] No AudioContext; falling back to <audio>."); return; }
+
+    try {
+      await ctx.resume();
+    } catch (_) {}
+    console.log("[Audio][WA] context state:", ctx && ctx.state);
+
+    const blob = _waQueue.shift();
+    _waPlaying = true;
+
+    try {
+      const ab = await blob.arrayBuffer();
+      const buffer = await ctx.decodeAudioData(ab.slice(0));
+
+      // Piper TTS voices are compiled at different native sample rates (16k, 22k, 24k, 32k Hz).
+      // If the audio buffer's sample rate differs from the AudioContext output rate, the browser
+      // will play it at the wrong pitch and speed. We resample offline to correct this.
+      let outBuffer = buffer;
+      if (buffer.sampleRate !== ctx.sampleRate) {
+        try {
+          const ratio = ctx.sampleRate / buffer.sampleRate;
+          const targetLength = Math.ceil(buffer.length * ratio);
+          const offline = new OfflineAudioContext(
+            buffer.numberOfChannels,
+            targetLength,
+            ctx.sampleRate
+          );
+          const offSrc = offline.createBufferSource();
+          offSrc.buffer = buffer;
+          offSrc.connect(offline.destination);
+          offSrc.start(0);
+          outBuffer = await offline.startRendering();
+          console.log(`[Audio][WA] resampled from ${buffer.sampleRate} to ${ctx.sampleRate} Hz`);
+        } catch (re) {
+          console.warn("[Audio][WA] resample failed; using original buffer", re);
+          outBuffer = buffer;
+        }
+      }
+
+      const src = ctx.createBufferSource();
+      src.buffer = outBuffer;
+      const gain = ctx.createGain();
+      gain.gain.value = _waGain; // runtime adjustable
+      src.connect(gain).connect(ctx.destination);
+      src.onended = () => {
+        _waPlaying = false;
+        _waPlayNext();
+      };
+      console.log("[Audio][WA] play buffer:", { duration: outBuffer.duration.toFixed(3), sr: outBuffer.sampleRate, ch: outBuffer.numberOfChannels });
+      src.start();
+    } catch (e) {
+      console.warn("[Audio][WA] decode/play failed; enqueueing via <audio> fallback.", e);
+      // Fallback to <audio> queue if WebAudio decode fails
+      const url = URL.createObjectURL(blob);
+      _ttsQueue.push(url);
+      if (!_ttsPlaying) playNextInQueue();
+      _waPlaying = false;
+    }
+  }
+
+  function ensureTtsPlayer() {
+    if (_ttsPlayer) return _ttsPlayer;
+    const a = new Audio();
+    a.muted = false;
+    a.volume = 1.0;
+    a.preload = "auto";
+    a.addEventListener("play",   () => console.log("[Audio] player: play"));
+    a.addEventListener("ended",  () => { console.log("[Audio] player: ended"); _ttsPlaying = false; playNextInQueue(); });
+    a.addEventListener("error",  (e) => { console.warn("[Audio] player: error", e); _ttsPlaying = false; playNextInQueue(); });
+    a.addEventListener("stalled",() => console.log("[Audio] player: stalled"));
+    a.addEventListener("suspend",() => console.log("[Audio] player: suspend"));
+    a.addEventListener("waiting",() => console.log("[Audio] player: waiting"));
+    _ttsPlayer = a;
+    return a;
+  }
+
+  function enqueueBlob(blob) {
+    window.__lastAudioBlob = blob; // retained for debugging in the browser console
+    try { console.log("[Audio] enqueueBlob size:", blob && blob.size); } catch {}
+    if (USE_WEBAUDIO) {
+      _waQueue.push(blob);
+      _waPlayNext();
+      return;
+    }
+    const url = URL.createObjectURL(blob);
+    _ttsQueue.push(url);
+    if (!_ttsPlaying) playNextInQueue();
+  }
+
+  function enqueueDataUri(dataUri) {
+    // Convert the data URI to a Blob so it can go through the same queue as other audio
+    // sources. Object URLs created from Blobs can be revoked after playback, which
+    // prevents memory leaks that would accumulate over a long interview session.
+    fetch(dataUri).then(r => r.blob()).then(enqueueBlob).catch(err => {
+      console.warn("[Audio] enqueueDataUri failed:", err);
+    });
+  }
+
+  function playNextInQueue() {
+    if (_ttsQueue.length === 0) return;
+    const player = ensureTtsPlayer();
+    const url = _ttsQueue.shift();
+    _ttsPlaying = true;
+
+    // Revoke URL when done
+    player.addEventListener("ended", () => URL.revokeObjectURL(url), { once: true });
+
+    player.src = url;
+    player.play().catch(err => {
+      console.warn("[Audio] play() blocked; waiting for a user gesture…", err);
+      const oneShot = () => {
+        player.play().catch(console.error);
+        window.removeEventListener("click", oneShot);
+        window.removeEventListener("keydown", oneShot);
+      };
+      window.addEventListener("click", oneShot, { once: true });
+      window.addEventListener("keydown", oneShot, { once: true });
+    });
+  }
+
+  // Browsers block audio playback until the user has interacted with the page.
+  // Creating and immediately resuming an AudioContext on the first click or keypress
+  // satisfies this requirement and allows all subsequent TTS playback to proceed
+  // without individual play() calls being blocked.
+  let _audioCtx = null;
+  function unlockAudioOnGesture() {
+    try { _audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (_) {}
+    const resume = () => {
+      if (_audioCtx) _audioCtx.resume().catch(() => {});
+      window.removeEventListener("click", resume);
+      window.removeEventListener("keydown", resume);
+    };
+    window.addEventListener("click", resume, { once: true });
+    window.addEventListener("keydown", resume, { once: true });
+  }
+  document.addEventListener("DOMContentLoaded", unlockAudioOnGesture);
+
+  // When the user plugs in or removes an audio device mid-interview, the shared player
+  // can produce static on the first clip played through the new device. Discarding
+  // and recreating the player object clears any stale internal state.
+try {
+  if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
+    navigator.mediaDevices.addEventListener('devicechange', () => {
+      console.log('[Audio] devicechange detected — rebuilding shared player');
+      try { if (_ttsPlayer) { _ttsPlayer.pause(); _ttsPlayer.src = ''; } } catch(_){}
+      _ttsPlayer = null;
+      ensureTtsPlayer();
+    });
+  }
+} catch (e) {
+  console.warn('[Audio] devicechange hookup failed', e);
+}
+
+  // Returns the voice model filename and speaker ID from the persona stored in localStorage.
+  // Several field name variants are tried because the persona schema has evolved over
+  // multiple releases. The standard path (top-level persona_voice_model) is tried first.
+  function getPersonaVoiceSelection() {
+    let persona = {};
+    try {
+      persona = JSON.parse(localStorage.getItem("persona_data") || "{}");
+    } catch (e) {
+      console.warn("[TTS] Could not parse persona_data from localStorage.", e);
+      persona = {};
+    }
+
+    // Older persona files may nest voice settings under persona.voice or persona.persona_voice.
+    const v = (persona && (persona.voice || persona.persona_voice)) ? (persona.voice || persona.persona_voice) : {};
+
+    try { console.log("[TTS] persona top-level keys:", Object.keys(persona || {})); } catch {}
+    try { console.log("[TTS] persona.voice keys:", Object.keys(v || {})); } catch {}
+
+    // Current persona format: voice fields are stored at the top level of the JSON.
+    // Cache the resolved values in localStorage so repeated calls avoid re-parsing.
+    if (typeof persona.persona_voice_model === "string" && persona.persona_voice_model.trim()) {
+      const vf = persona.persona_voice_model.trim();
+      let sid = null;
+      if (persona.persona_voice_speaker_id !== undefined && persona.persona_voice_speaker_id !== null) {
+        sid = Number.isInteger(persona.persona_voice_speaker_id)
+          ? persona.persona_voice_speaker_id
+          : (isFinite(parseInt(persona.persona_voice_speaker_id)) ? parseInt(persona.persona_voice_speaker_id) : null);
+      }
+      // Persist for subsequent calls / pages so we don't depend on timing
+      localStorage.setItem("last_voice_file", vf);
+      if (sid !== null && sid !== undefined) localStorage.setItem("last_speaker_id", String(sid));
+      clearVoiceError();
+      console.log("[TTS] Using top-level persona_voice_model:", vf, "speakerId:", sid);
+      return { voiceFile: vf, speakerId: sid };
+    }
+
+    // Legacy fallback: older persona files nested voice data under persona.voice or
+    // used different field names. Try each known variant before giving up.
+    const candidate = [
+      typeof v.onnx_filename === "string" ? v.onnx_filename.trim() : "",
+      typeof v["onnx-filename"] === "string" ? v["onnx-filename"].trim() : "",
+      typeof v.voice_file === "string" ? v.voice_file.trim() : "",
+      typeof persona.persona_voice_model === "string" ? persona.persona_voice_model.trim() : "",
+      typeof persona.persona_voice_file === "string" ? persona.persona_voice_file.trim() : "",
+      typeof persona.voice_file === "string" ? persona.voice_file.trim() : ""
+    ].find(Boolean);
+
+    const voiceFile = candidate || null;
+
+    // Speaker ID can be number or numeric string.
+    // Check nested voice first, then common top-level fields, then localStorage.
+    let speakerId = null;
+    if (v && v.speaker_id !== undefined && v.speaker_id !== null) {
+      speakerId = Number.isInteger(v.speaker_id) ? v.speaker_id : (isFinite(parseInt(v.speaker_id)) ? parseInt(v.speaker_id) : null);
+    } else if (persona && persona.speaker_id !== undefined && persona.speaker_id !== null) {
+      speakerId = Number.isInteger(persona.speaker_id) ? persona.speaker_id : (isFinite(parseInt(persona.speaker_id)) ? parseInt(persona.speaker_id) : null);
+    } else if (persona && persona.persona_voice_speaker_id !== undefined && persona.persona_voice_speaker_id !== null) {
+      speakerId = Number.isInteger(persona.persona_voice_speaker_id)
+        ? persona.persona_voice_speaker_id
+        : (isFinite(parseInt(persona.persona_voice_speaker_id)) ? parseInt(persona.persona_voice_speaker_id) : null);
+    } else {
+      const lsSid = localStorage.getItem("last_speaker_id");
+      speakerId = (lsSid !== null && lsSid !== undefined && isFinite(parseInt(lsSid))) ? parseInt(lsSid) : null;
+    }
+
+    if (!voiceFile) {
+      try {
+        console.log("[TTS] Diagnostic — considered fields:", {
+          v_onxx_filename: v && v.onnx_filename,
+          v_onnx_kebab: v && v["onnx-filename"],
+          v_voice_file: v && v.voice_file,
+          top_persona_voice_model: persona && persona.persona_voice_model,
+          top_persona_voice_file: persona && persona.persona_voice_file,
+          top_voice_file: persona && persona.voice_file
+        });
+      } catch {}
+      showVoiceError("🔴 No persona voice is configured for this profile. Go to the main page → Edit Profile, choose a voice, then export a new persona file and load it here.");
+      console.warn("[TTS] No persona voice configured. Instruct user: Main page → Edit Profile → choose a voice → export updated persona → reload.");
+      return null;
+    }
+
+    clearVoiceError();
+    console.log("[TTS] Using persona voice file:", voiceFile, "speakerId:", speakerId);
+    return { voiceFile, speakerId };
+  }
+
+  async function speakAnswerViaPlayVoice(answerText) {
+    let sel = getPersonaVoiceSelection();
+    if (!sel) {
+      // No voice is configured in the persona. Rather than silently failing,
+      // try to use the first available voice from the server so the interview
+      // can at least function in audio mode with a generic voice.
+      try {
+        const resp = await fetch("/api/piper-voices");
+        if (resp.ok) {
+          const list = await resp.json();
+          if (Array.isArray(list) && list.length > 0) {
+            const vf = (list[0] && (list[0]["onnx-filename"] || list[0]["onnx_filename"])) || null;
+            const sid = (list[0] && (Number.isInteger(list[0]["speaker_id"]) ? list[0]["speaker_id"] : null));
+            if (vf) {
+              // Persist for next time
+              localStorage.setItem("last_voice_file", vf);
+              if (sid !== null && sid !== undefined) localStorage.setItem("last_speaker_id", String(sid));
+              sel = { voiceFile: vf, speakerId: sid ?? null };
+              showVoiceError(""); // clear any previous warning
+              console.log("[TTS] Using default voice from /api/piper-voices:", sel);
+            }
+          }
+        }
+      } catch (e) {
+        console.warn("Could not fetch /api/piper-voices for default voice:", e);
+      }
+    }
+    if (!sel) {
+      console.warn("No persona voice available even after trying /api/piper-voices; skipping TTS.");
+      return;
+    }
+    const { voiceFile, speakerId } = sel;
+    console.log("[TTS] /api/play-voice payload:", { text: (answerText || "").slice(0, 80), voice_file: voiceFile, speaker_id: speakerId });
+    const res = await fetch("/api/play-voice", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        text: answerText,
+        voice_file: voiceFile,
+        speaker_id: speakerId
+      })
+    });
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "");
+      throw new Error(`TTS failed (${res.status}): ${errText}`);
+    }
+    const blob = await res.blob();
+    enqueueBlob(blob);
+  }
+
+  async function playFromUrl(url) {
+    console.log("[Audio] fetching URL:", url);
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Audio URL fetch failed (${res.status})`);
+    const ct = (res.headers.get('content-type') || '').toLowerCase();
+    if (!ct.startsWith('audio/')) throw new Error(`URL did not return audio (content-type: ${ct})`);
+    const blob = await res.blob();
+    if (!blob || blob.size < 44) throw new Error('Audio blob too small.');
+    enqueueBlob(blob);
+  }
+  
+  async function playFromDataUri(dataUri) {
+    enqueueDataUri(dataUri);
+  }
+  
+  // Cleans up common text encoding issues in LLM output before displaying or speaking it.
+  // Two types of corruption are fixed:
+  //   1. Mojibake — UTF-8 bytes that were incorrectly decoded as Windows-1252, producing
+  //      multi-character garbage sequences (e.g., â€™ instead of an apostrophe).
+  //   2. Unicode punctuation — curly quotes, em-dashes, and ellipsis characters that some
+  //      LLMs emit but that cause problems in TTS and Word export.
+  function normalizeSmartQuotes(s) {
+    if (typeof s !== 'string') return s;
+    let out = s;
+
+    // Step 1: Fix UTF-8 bytes that were decoded as Windows-1252 (common when LLM output
+    // travels through certain streaming parsers). These appear as multi-character garbage.
+    out = out.replace(/â€™/g, "'")
+             .replace(/â€˜/g, "'")
+             .replace(/â€œ|â€/g, '"');
+    // Step 2 prep: dashes and ellipsis mojibake sequences.
+    out = out.replace(/â€“/g, '-')
+             .replace(/â€”/g, '--')
+             .replace(/â€¦/g, '...');
+    out = out.replace(/Â /g, ' ');
+
+    // Step 2: Replace genuine Unicode punctuation with plain ASCII equivalents.
+    out = out
+      .replace(/[\u2018\u2019\u2032]/g, "'")
+      .replace(/[\u201C\u201D\u2033]/g, '"')
+      .replace(/[\u2014]/g, '--')
+      .replace(/[\u2013]/g, '-')
+      .replace(/[\u2026]/g, '...')
+      .replace(/[\u00A0]/g, ' ');
+
+    // Step 3: The Unicode replacement character (U+FFFD) sometimes appears in place of
+    // an apostrophe that was lost during encoding. Infer from context whether it should
+    // be restored as an apostrophe, then replace any remaining instances with one.
+    out = out.replace(/([A-Za-z0-9])\uFFFD([A-Za-z0-9])/g, "$1'$2");
+    out = out.replace(/\b\uFFFD([A-Za-z])/g, "'$1");
+    out = out.replace(/([A-Za-z])\uFFFD\b/g, "$1'");
+    // Any remaining isolated replacement characters — use apostrophe as the safest fallback.
+    out = out.replace(/\uFFFD/g, "'");
+
+    return out;
+  }
+
+  // Extract assistant reply text from heterogeneous JSON shapes
+  function extractReplyText(payload) {
+    if (!payload || typeof payload !== 'object') return '';
+    const candidates = [
+      payload.response, payload.reply, payload.text, payload.answer, payload.assistant, payload.message, payload.output,
+      payload.choices && payload.choices[0] && payload.choices[0].message && payload.choices[0].message.content,
+      payload.choices && payload.choices[0] && payload.choices[0].text,
+      payload.data && payload.data.response,
+      payload.data && payload.data.reply,
+      payload.data && payload.data.text,
+      payload.data && payload.data.answer,
+      payload.data && payload.data.message,
+      payload.result && payload.result.response,
+      payload.result && payload.result.reply,
+      payload.result && payload.result.text,
+      payload.result && payload.result.answer,
+    ].filter(Boolean);
+    if (candidates.length > 0) return String(candidates[0]).trim();
+    try {
+      const s = JSON.stringify(payload);
+      const m = s.match(/"content"\s*:\s*"([^"]{1,500})"/);
+      return m ? m[1] : '';
+    } catch { return ''; }
+  }
+
+  async function playAudioFromSources({ streamUrl, fileUrl, b64, aiReply }) {
+    console.log("[Audio] sources:", { streamUrl, fileUrl, hasB64: !!b64, hasReply: !!aiReply });
+    // Diagnostic override: append ?force_tts=1 to the page URL to bypass the normal
+    // audio sources (stream, file, Base64) and go straight to the TTS fallback.
+    // Useful when testing the Piper voice path in isolation.
+    const force = new URLSearchParams(location.search).get('force_tts') === '1';
+    if (force) {
+      console.log("[Audio] force_tts=1 present — using /api/play-voice fallback immediately.");
+      if (aiReply) {
+        await speakAnswerViaPlayVoice(aiReply);
+      } else {
+        console.log("[Audio] No aiReply text available to send to TTS.");
+      }
+      return true;
+    }
+    try {
+      if (streamUrl) {
+        await playFromUrl(streamUrl);
+        return true;
+      }
+      if (fileUrl) {
+        await playFromUrl(fileUrl);
+        return true;
+      }
+      if (b64) {
+        const dataUri = `data:audio/wav;base64,${b64}`;
+        await playFromDataUri(dataUri);
+        return true;
+      }
+      throw new Error("No audio sources provided.");
+    } catch (err) {
+      console.warn("Primary audio playback failed, falling back to /api/play-voice:", err);
+      if (aiReply) {
+        try {
+          await speakAnswerViaPlayVoice(aiReply);
+          return true;
+        } catch (ttsErr) {
+          console.warn("TTS fallback also failed:", ttsErr);
+        }
+      }
+      return false;
+    }
+  }
+
+  function showVoiceError(msg) {
+    const el = document.getElementById("voiceError");
+    if (!el) return;
+    el.textContent = msg || "";
+    el.style.display = msg ? "block" : "none";
+  }
+  function clearVoiceError() {
+    showVoiceError("");
+  }
+
+  function scrollTranscriptToBottom() {
+    // Prefer scrolling the outer container which has the scrollbar
+    const scroller = document.getElementById('transcriptContainer');
+    if (scroller) {
+      scroller.scrollTop = scroller.scrollHeight;
+      return;
+    }
+    // Fallback: ensure the last item in transcriptArea is visible
+    const area = document.getElementById('transcriptArea');
+    if (area && area.lastElementChild) {
+      area.lastElementChild.scrollIntoView({ behavior: 'instant', block: 'end' });
+    }
+  }
+
+  document.addEventListener("DOMContentLoaded", function () {
+    const previousPersonaId = localStorage.getItem("previous_persona_id");
+    const personaDataRaw = localStorage.getItem("persona_data");
+
+    if (personaDataRaw) {
+      localStorage.setItem("interview_status", "");
+      localStorage.setItem("transcript_saved", "");
+      try {
+        const persona = JSON.parse(personaDataRaw);
+        const personaId = `${persona.full_name || ""}_${persona.date_of_birth || ""}`;
+
+        if (previousPersonaId !== personaId) {
+          localStorage.setItem("interview_status", "");
+          localStorage.setItem("transcript_saved", "");
+          chatHistory = [];
+          localStorage.setItem("previous_persona_id", personaId);
+        }
+
+        const name = persona.full_name || "Unknown Person";
+        const instructions = persona.interview_instructions || "No interview instructions provided.";
+        const dateStr = new Date().toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' });
+
+        document.getElementById("interviewHeading").innerText = normalizeSmartQuotes(`Interview with ${name} conducted on ${dateStr}`);
+        document.getElementById("interviewInstructions").innerText = normalizeSmartQuotes(instructions);
+      } catch (e) {
+        console.warn("Could not load persona data.");
+      }
+    }
+  });
+
+  function endInterview() {
+    const confirmEnd = confirm("Are you sure you want to end the interview?");
+    if (!confirmEnd) return;
+
+    const transcript = document.getElementById("transcriptArea");
+    const btn = document.querySelector(".segmented-start-button");
+    const chatContainer = document.getElementById("chatContainer");
+    const textInputRow = document.getElementById("textInputRow");
+    if (textInputRow) textInputRow.style.display = "none";
+    document.getElementById("voiceInputBtn").style.display = "none";
+    chatContainer.style.display = "none";
+
+    localStorage.setItem("interview_status", "ended");
+    const now = new Date();
+    const endTimeStr = now.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+    transcript.innerHTML += `<p><strong>Interview concluded at ${endTimeStr}.</strong></p>`;
+    scrollTranscriptToBottom();
+
+    setTimeout(() => {
+      const savePrompt = confirm("Do you want to save a copy of the interview transcript?");
+      const personaDataRaw = localStorage.getItem("persona_data");
+      let personaName = "Unknown";
+      let fullName = "Unknown Person";
+      let now = new Date();
+      let localDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+      if (personaDataRaw) {
+        const persona = JSON.parse(personaDataRaw);
+        personaName = (persona.full_name || "Unknown").replace(/\s+/g, "-");
+        fullName = persona.full_name || "Unknown Person";
+      }
+
+      if (savePrompt) {
+        localStorage.setItem("transcript_saved", "true");
+
+        const requestData = {
+          persona_name: personaName,
+          full_name: fullName,
+          interview_date: localDate,
+          transcript_text: Array.from(transcript.querySelectorAll("p"))
+            .map(p => normalizeSmartQuotes(p.dataset.export || p.innerText))
+            .join("\n")
+            .trim()
+        };
+
+        fetch("http://localhost:8010/api/export-transcript-docx", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(requestData)
+        })
+        .then(response => response.blob())
+        .then(blob => {
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `Interview-${personaName}-${localDate}.docx`;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          window.URL.revokeObjectURL(url);
+        })
+        .catch(() => {
+          alert("There was an error generating the Word document.");
+        });
+
+      } else {
+        localStorage.setItem("transcript_saved", "false");
+      }
+
+      const segmentedStartBtn = document.querySelector(".segmented-start-button");
+      segmentedStartBtn.style.display = "inline-flex";
+      segmentedStartBtn.classList.remove("end-interview-btn");
+
+      // Remove the END Interview button if it exists
+      const endBtn = document.getElementById("endInterviewBtn");
+      if (endBtn) {
+        endBtn.remove();
+      }
+
+      // Restore Cancel button now that the interview has concluded
+      const cancelBtn = document.querySelector(".cancel-btn");
+      if (cancelBtn) {
+        cancelBtn.style.display = "inline-block";
+      }
+    }, 100);
+  }
+
+  function toggleInterview(mode) {
+    const transcript = document.getElementById("transcriptArea");
+    const chatContainer = document.getElementById("chatContainer");
+    const transcriptContainer = document.getElementById("transcriptContainer");
+    const voiceBtn = document.getElementById("voiceInputBtn");
+    const textInput = document.getElementById("chatInput");
+
+    localStorage.setItem("interview_mode", mode);
+    clearVoiceError();
+
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+
+    // Read previous status BEFORE setting to "started"
+    const previousStatus = localStorage.getItem("interview_status");
+    localStorage.setItem("interview_status", "started");
+    if (previousStatus === "ended") {
+      transcript.innerHTML += `<p><strong>Interview recommenced at ${timeStr}.</strong></p>`;
+    } else {
+      transcript.innerHTML += `<p><strong>Interview commenced at ${timeStr}.</strong></p>`;
+    }
+
+    transcriptContainer.style.display = "block";
+
+    chatContainer.style.display = "flex";
+
+    // Show only the correct input method
+    const textInputRow = document.getElementById("textInputRow");
+    if (mode === "voice") {
+      voiceBtn.style.display = "inline-flex";
+      if (textInputRow) textInputRow.style.display = "none";
+    } else {
+      voiceBtn.style.display = "none";
+      if (textInputRow) textInputRow.style.display = "flex";
+    }
+
+    // Hide the segmented start button
+    document.querySelector(".segmented-start-button").style.display = "none";
+
+    // Hide Cancel button during interview (END Interview button takes its place)
+    const cancelBtn = document.querySelector(".cancel-btn");
+    if (cancelBtn) {
+      cancelBtn.style.display = "none";
+    }
+
+    // Ensure END Interview button is shown only once
+    let endBtn = document.getElementById("endInterviewBtn");
+    const btnRow = document.querySelector(".conduct-button-row");
+    if (!endBtn) {
+      endBtn = document.createElement("button");
+      endBtn.id = "endInterviewBtn";
+      endBtn.className = "end-interview-btn";
+      endBtn.textContent = "END Interview";
+      endBtn.onclick = endInterview;
+      btnRow.insertBefore(endBtn, cancelBtn);
+    }
+    endBtn.style.display = "inline-block";
+    endBtn.style.borderRadius = "10px";
+    endBtn.style.fontWeight = "bold";
+  }
+
+  let mediaRecorder;
+  let audioChunks = [];
+
+  async function startListening() {
+    const btn = document.getElementById("voiceInputBtn");
+    btn.classList.add("listening");
+    clearVoiceError();
+    // Ensure any previous recording is fully stopped and input tracks are released
+try {
+  if (mediaRecorder && mediaRecorder.state !== "inactive") {
+    mediaRecorder.stop();
+  }
+} catch (_) {}
+if (micStream) {
+  try { micStream.getTracks().forEach(t => t.stop()); } catch (_) {}
+  micStream = null;
+}
+audioChunks = [];
+
+// Request mono audio and disable browser-side audio processing (echo cancellation,
+// noise suppression, auto gain). These DSP features can corrupt the audio before
+// it reaches Whisper, causing transcription errors or missing words.
+const gumConstraints = {
+  audio: {
+    channelCount: 1,
+    sampleRate: { ideal: 48000 },
+    echoCancellation: false,
+    noiseSuppression: false,
+    autoGainControl: false
+  }
+};
+console.log("[Mic] requesting getUserMedia with", gumConstraints);
+// The "Thinking..." indicator is shown only after transcription succeeds, just
+// before the LLM call. Showing it here (during mic init) would be premature.
+try {
+  const stream = await navigator.mediaDevices.getUserMedia(gumConstraints);
+  micStream = stream; // Save globally so we can stop it later
+
+
+      let mrOptions = {};
+      const preferredMime = 'audio/webm;codecs=opus';
+      if (window.MediaRecorder && typeof MediaRecorder.isTypeSupported === 'function' && MediaRecorder.isTypeSupported(preferredMime)) {
+        mrOptions.mimeType = preferredMime;
+      }
+      mediaRecorder = new MediaRecorder(stream, mrOptions);
+      audioChunks = [];
+
+      mediaRecorder.ondataavailable = event => {
+        if (event.data.size > 0) {
+          audioChunks.push(event.data);
+        }
+      };
+
+      mediaRecorder.start();
+    } catch (err) {
+      console.error("❌ Microphone access denied or error:", err);
+      alert("Microphone permission was denied or failed. Please check your browser settings.");
+      stopListening();  // Remove listening class if it failed
+    }
+  }
+
+  async function stopListening() {
+    const btn = document.getElementById("voiceInputBtn");
+    btn.classList.remove("listening");
+
+    if (mediaRecorder && mediaRecorder.state !== "inactive") {
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunks, { type: "audio/webm" });
+        const formData = new FormData();
+        formData.append("file", audioBlob, "recording.webm");
+
+        // Do not show "Thinking..." yet — only show it after transcription succeeds
+        // and we are about to call the LLM. Showing it earlier is misleading.
+        const thinkingMsg = document.getElementById("thinkingMessage");
+        // Clear any previous warning message
+        const transcriptArea = document.getElementById("transcriptArea");
+        // Remove any previous warning (optional: only remove last one, or all)
+        const prevWarnings = transcriptArea.querySelectorAll('.transcript-warning');
+        prevWarnings.forEach(w => w.remove());
+
+        try {
+          const response = await fetch("http://localhost:8010/api/transcribe-audio", {
+            method: "POST",
+            body: formData
+          });
+          const result = await response.json();
+          const transcribedText = (result.text || "").trim();
+          const q = normalizeSmartQuotes(transcribedText);
+          // Whisper sometimes returns very short or filler transcriptions when the
+        // user releases the button too quickly or there is background noise.
+        // Treat these as empty input rather than sending them to the LLM.
+          const junkValues = ["the", "uh"];
+          const isJunk =
+            !transcribedText ||
+            transcribedText.length < 3 ||
+            junkValues.includes(transcribedText.toLowerCase());
+          if (isJunk) {
+            // Do not show thinking, do not send to LLM, show warning
+            if (thinkingMsg) {
+              thinkingMsg.style.display = "none";
+              thinkingMsg.innerText = "";
+            }
+            // Show warning in transcript area
+            const warningDiv = document.createElement("div");
+            warningDiv.className = "transcript-warning";
+            warningDiv.innerText = "⚠️ Sorry, I didn’t catch that. Try asking your question again.";
+            transcriptArea.appendChild(warningDiv);
+            scrollTranscriptToBottom();
+            return;
+          }
+
+          // Show transcribed question
+          chatHistory.push({ role: "user", content: q });
+          const userPara = document.createElement("p");
+          userPara.innerHTML = `<strong>${q}</strong>`;
+          userPara.dataset.export = `[OFFICER] ${q}`;
+          transcriptArea.appendChild(userPara);
+
+          // Show thinking message just before LLM call
+          if (thinkingMsg) {
+            thinkingMsg.innerText = "Thinking...";
+            thinkingMsg.style.display = "block";
+          }
+
+          // Prepare persona
+          let personaData = {};
+          try {
+            personaData = JSON.parse(localStorage.getItem("persona_data") || "{}");
+          } catch (e) {
+            personaData = {};
+          }
+
+          try {
+            const chatResp = await fetch("http://localhost:8010/api/chat", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                message_history: [...chatHistory],
+                persona: personaData,
+                audio_mode: true
+              })
+            });
+
+            const contentType = (chatResp.headers.get("content-type") || "").toLowerCase();
+            console.log("[Chat] content-type:", contentType);
+
+            if (chatResp.ok && contentType.startsWith("audio/")) {
+                try {
+                    // In voice mode the HTTP response body is the raw WAV audio.
+                    // The transcript text cannot be sent in the body alongside binary audio,
+                    // so the backend encodes it as Base64 and puts it in the custom response
+                    // header "X-Reply-Text-Base64". We decode it here using atob() followed
+                    // by a TextDecoder to correctly handle non-ASCII characters (e.g., macrons).
+                    const headerB64 = chatResp.headers.get("x-reply-text-base64");
+                    let aiReply = "";
+                    if (headerB64) {
+                        try {
+                            const bin = atob(headerB64);
+                            const bytes = new Uint8Array(bin.length);
+                            for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+                            aiReply = new TextDecoder("utf-8").decode(bytes).trim();
+                        } catch (_) {
+                            aiReply = "";
+                        }
+                    }
+                    aiReply = normalizeSmartQuotes(aiReply);
+
+                    if (aiReply) {
+                        chatHistory.push({ role: "assistant", content: aiReply });
+                    }
+
+                    // Play returned audio via shared queue
+                    const audioBlob = await chatResp.blob();
+                    console.log("[Audio] enqueue chat audio blob from /api/chat");
+                    enqueueBlob(audioBlob);
+
+                    // Write full reply to transcript (with export tag)
+                    const replyPara = document.createElement("p");
+                    const tag = (personaData.persona_type || "").toLowerCase() === "suspect" ? "[SUSPECT]" : "[WITNESS]";
+                    if (aiReply) {
+                        // Do not show visible label; indent like text chat
+                        replyPara.innerHTML = aiReply;
+                        replyPara.style.marginLeft = "20px";
+                        replyPara.dataset.export = `${tag} ${aiReply}`;
+                    } else {
+                        // Fallback if text is not present for any reason
+                        replyPara.textContent = "[Audio reply played]";
+                        replyPara.style.marginLeft = "20px";
+                        replyPara.dataset.export = `${tag} [Audio reply played]`;
+                    }
+                    transcriptArea.appendChild(replyPara);
+
+                } finally {
+                    if (thinkingMsg) {
+                        thinkingMsg.style.display = "none";
+                        thinkingMsg.innerText = "";
+                    }
+                    scrollTranscriptToBottom();
+                }
+                return;
+            }
+
+            let chatData = null;
+            try {
+              chatData = await chatResp.json();
+            } catch (_) {
+              chatData = null;
+            }
+
+            if (!chatResp.ok) {
+              const detail = (chatData && chatData.detail) ? chatData.detail : `Request failed (${chatResp.status})`;
+              // Show the exact red inline message for missing voice models (404)
+              if (chatResp.status === 404 && detail.startsWith("🔴 The selected voice model")) {
+                showVoiceError(detail);
+              } else {
+                const errorPara = document.createElement("p");
+                errorPara.innerText = `⚠️ ERROR: ${detail}`;
+                transcriptArea.appendChild(errorPara);
+              }
+              if (thinkingMsg) {
+                thinkingMsg.style.display = "none";
+                thinkingMsg.innerText = "";
+              }
+              scrollTranscriptToBottom();
+              return;
+            }
+
+            clearVoiceError();
+
+            // Extract assistant text and any audio pointers (support nested shapes)
+            const aiReply = normalizeSmartQuotes(extractReplyText(chatData) || "[No reply received]");
+            chatHistory.push({ role: "assistant", content: aiReply });
+
+            const replyPara = document.createElement("p");
+            replyPara.innerHTML = aiReply.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+            replyPara.style.marginLeft = "20px";
+            {
+              const tag = (personaData.persona_type || "").toLowerCase() === "suspect" ? "[SUSPECT]" : "[WITNESS]";
+              replyPara.dataset.export = `${tag} ${aiReply}`;
+            }
+            transcriptArea.appendChild(replyPara);
+
+            // Prefer streaming URL; fallback to file URL; fallback to base64 (check nested .data as well)
+            const streamUrl = chatData && (chatData.audio_stream_url || (chatData.data && chatData.data.audio_stream_url));
+            const fileUrl   = chatData && (chatData.audio_file_url   || (chatData.data && chatData.data.audio_file_url));
+            const b64       = chatData && (chatData.audio_base64     || (chatData.data && chatData.data.audio_base64));
+            await playAudioFromSources({ streamUrl, fileUrl, b64, aiReply });
+          } catch (err) {
+            const errorPara = document.createElement("p");
+            errorPara.innerText = `⚠️ ERROR: ${err.message}`;
+            transcriptArea.appendChild(errorPara);
+          }
+
+          // Hide thinking message and clear text
+          if (thinkingMsg) {
+            thinkingMsg.style.display = "none";
+            thinkingMsg.innerText = "";
+          }
+          scrollTranscriptToBottom();
+        } catch (err) {
+          alert("⚠️ Audio transcription failed.");
+          if (thinkingMsg) {
+            thinkingMsg.style.display = "none";
+            thinkingMsg.innerText = "";
+          }
+        }
+      };
+      mediaRecorder.stop();
+      // Stop all mic tracks immediately after recording ends to release the hardware
+  // and clear the browser's microphone-in-use indicator without delay.
+      if (micStream) {
+        try { micStream.getTracks().forEach(t => t.stop()); } catch (_) {}
+        micStream = null;
+      }
+      mediaRecorder = null;
+    }
+  }
+
+  function handleSegmentedClick(event) {
+    const interviewStatus = localStorage.getItem("interview_status");
+    if (interviewStatus === "ended") {
+      const confirmResume = confirm("Do you wish to recommence this interview?\n\nClick OK to continue or Cancel.\n\nIf you want to start an entirely new interview, you need to return to the Home page and load the persona again.");
+      if (!confirmResume) return;
+    }
+
+    const button = event.currentTarget;
+    const rect = button.getBoundingClientRect();
+    const clickX = event.clientX - rect.left;
+    const mode = clickX < rect.width / 2 ? 'text' : 'voice';
+    toggleInterview(mode);
+  }
+</script>
+
+<script>
+  function handleHomeClick() {
+    const interviewStatus = localStorage.getItem("interview_status");
+    const transcriptSaved = localStorage.getItem("transcript_saved");
+    const transcript = document.getElementById("transcriptArea");
+
+    if (!interviewStatus) {
+      // No interview started or ended—allow navigation
+      chatHistory = [];
+      window.location.href = "index.html";
+      return;
+    }
+
+    if (interviewStatus === "started") {
+      alert("The interview is in progress.\n\nYou need to click END INTERVIEW before you can return to the Home page.");
+      return;
+    }
+
+    if (interviewStatus === "ended" && transcriptSaved === "true") {
+      // Interview ended and transcript saved—allow navigation
+      chatHistory = [];
+      window.location.href = "index.html";
+      return;
+    }
+
+    if (interviewStatus === "ended" && transcriptSaved === "false") {
+      const savePrompt = confirm("Do you want to save a copy of the interview transcript before leaving this page?\n\nClick OK or you will lose the information from this interview.");
+      if (!savePrompt) {
+        chatHistory = [];
+        window.location.href = "index.html";
+      } else {
+        const personaDataRaw = localStorage.getItem("persona_data");
+        let personaName = "Unknown";
+        let fullName = "Unknown Person";
+        let now = new Date();
+        let localDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+        if (personaDataRaw) {
+          const persona = JSON.parse(personaDataRaw);
+          personaName = (persona.full_name || "Unknown").replace(/\s+/g, "-");
+          fullName = persona.full_name || "Unknown Person";
+        }
+
+        const requestData = {
+          persona_name: personaName,
+          full_name: fullName,
+          interview_date: localDate,
+          transcript_text: Array.from(transcript.querySelectorAll("p"))
+            .map(p => normalizeSmartQuotes(p.dataset.export || p.innerText))
+            .join("\n")
+            .trim()
+        };
+
+        fetch("http://localhost:8010/api/export-transcript-docx", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(requestData)
+        })
+        .then(response => response.blob())
+        .then(blob => {
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `Interview-${personaName}-${localDate}.docx`;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          window.URL.revokeObjectURL(url);
+          chatHistory = [];
+          localStorage.setItem("transcript_saved", "true");
+        })
+        .catch(() => {
+          alert("There was an error generating the Word document.");
+        });
+      }
+    }
+  }
+  </script>
+
+<script>
+  const statusBox = document.getElementById("systemStatus");
+  const subtext = document.getElementById("status-subtext");
+  const startBtn = document.querySelector(".segmented-start-button");
+  startBtn.disabled = true;
+
+  function setStatusReady() {
+    statusBox.classList.remove("fade-pulse", "system-error", "system-ready");
+    statusBox.textContent = "The A.I. persona is ready. You may begin the interview.";
+    statusBox.classList.add("system-ready");
+    startBtn.disabled = false;
+    if (subtext) subtext.textContent = "";
+    localStorage.setItem("llm_ready", "true");
+  }
+
+  function setStatusError() {
+    statusBox.classList.remove("fade-pulse", "system-ready");
+    statusBox.textContent = "⚠️ System check failed. You may experience delays.";
+    statusBox.classList.add("system-error");
+    startBtn.disabled = false;
+    if (subtext) subtext.textContent = "";
+  }
+
+  function pollUntilReady(retries = 15) {
+    // Poll /backend/system-warmup to check if the LLM is ready. The warm-up itself
+  // is triggered manually (via the admin page or a separate POST), never from here,
+  // to avoid slowing application startup.
+    if (localStorage.getItem("llm_ready") === "true") {
+      setStatusReady();
+      return;
+    }
+    fetch("/backend/system-warmup")
+      .then(response => {
+        if (!response.ok) throw new Error("Non-OK response");
+        return response.json();
+      })
+      .then(data => {
+        setStatusReady();
+      })
+      .catch(() => {
+        if (retries > 0) {
+          setTimeout(() => pollUntilReady(retries - 1), 2000);
+        } else {
+          setStatusError();
+        }
+      });
+  }
+
+  function pollSystemStatus() {
+    statusBox.textContent = "Preparing A.I. persona…";
+    if (subtext) subtext.textContent = "This may take up to 30 seconds the first time you use the system.";
+
+    // Warm-up is triggered separately; here we only check if it is done.
+    if (localStorage.getItem("llm_ready") === "true") {
+      setStatusReady();
+    } else {
+      pollUntilReady();
+    }
+  }
+
+  document.addEventListener("DOMContentLoaded", pollSystemStatus);
+</script>
+
+<script>
+// Text mode: submits the typed question on ENTER and appends both the question and
+// the LLM reply to the live transcript. Audio is not played in text mode.
+document.addEventListener("DOMContentLoaded", function () {
+  const inputField = document.getElementById("chatInput");
+  const transcriptArea = document.getElementById("transcriptArea");
+  const thinkingMsg = document.getElementById("thinkingMessage");
+
+  // Retrieve persona data once for tag logic
+  let persona = {};
+  try {
+    persona = JSON.parse(localStorage.getItem("persona_data") || "{}");
+  } catch (e) {
+    persona = {};
+  }
+
+  async function submitTextMessage() {
+    const userMessage = inputField.value.trim();
+    const userMessageNorm = normalizeSmartQuotes(userMessage);
+    if (!userMessage) return;
+
+    chatHistory.push({ role: "user", content: userMessageNorm });
+
+    // data-export stores the plain-text version of each paragraph used when
+    // generating the Word transcript. It includes the speaker label (e.g., [OFFICER])
+    // that would otherwise be invisible in the on-screen HTML display.
+    const userPara = document.createElement("p");
+    userPara.innerHTML = `<strong>${userMessageNorm}</strong>`;
+    userPara.dataset.export = `[OFFICER] ${userMessageNorm}`;
+    transcriptArea.appendChild(userPara);
+    inputField.value = "";
+    if (thinkingMsg) thinkingMsg.style.display = "block";
+
+    try {
+      // Re-read persona from localStorage on every request rather than using the
+      // copy loaded at page start, in case the user navigated away and back.
+      let personaData = {};
+      try {
+        personaData = JSON.parse(localStorage.getItem("persona_data") || "{}");
+      } catch (e) { personaData = {}; }
+      const response = await fetch("http://localhost:8010/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message_history: [...chatHistory],
+          persona: personaData
+        })
+      });
+      let data = null;
+      try { data = await response.json(); } catch (_) { data = null; }
+      if (!response.ok) {
+        const detail = (data && data.detail) ? data.detail : `Request failed (${response.status})`;
+        throw new Error(detail);
+      }
+      const aiReply = extractReplyText(data) || "[No reply received]";
+      const aiReplyNorm = normalizeSmartQuotes(aiReply);
+      chatHistory.push({ role: "assistant", content: aiReplyNorm });
+
+      const replyPara = document.createElement("p");
+      replyPara.innerHTML = aiReplyNorm.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+      replyPara.style.marginLeft = "20px";
+      {
+        const tag = (personaData.persona_type || "").toLowerCase() === "suspect" ? "[SUSPECT]" : "[WITNESS]";
+        replyPara.dataset.export = `${tag} ${aiReplyNorm}`;
+      }
+      transcriptArea.appendChild(replyPara);
+
+      // Text mode: intentionally no TTS — audio is only played in voice mode.
+
+    } catch (err) {
+      transcriptArea.innerHTML += `<p>⚠️ ERROR: ${err.message}</p>`;
+    }
+
+    if (thinkingMsg) thinkingMsg.style.display = "none";
+    scrollTranscriptToBottom();
+  }
+
+  inputField.addEventListener("keydown", async function (event) {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      await submitTextMessage();
+    }
+  });
+
+  const sendBtn = document.getElementById("sendBtn");
+  if (sendBtn) {
+    sendBtn.addEventListener("click", async function () {
+      await submitTextMessage();
+      inputField.focus();
+    });
+  }
+});
+</script>
+<script>
+// Legacy helper — creates the "Transcript" heading inside #transcript if it does not
+// already exist. This div is not currently used by the main interview flow (which
+// renders into #transcriptArea instead), but is kept to avoid breaking any future
+// callers of appendToTranscript().
+function ensureTranscriptHeader() {
+  const transcriptDiv = document.getElementById("transcript");
+  if (!document.getElementById("transcript-header")) {
+    const header = document.createElement("h3");
+    header.textContent = "Transcript";
+    header.id = "transcript-header";
+    header.style.marginTop = "30px";
+    transcriptDiv.appendChild(header);
+  }
+}
+
+// Legacy helper — appends a question/answer pair to the old #transcript div.
+// Not called by the current interview flow; kept for compatibility.
+function appendToTranscript(questionText, answerText) {
+  ensureTranscriptHeader();
+
+  const transcriptDiv = document.getElementById("transcript");
+
+  const qaContainer = document.createElement("div");
+  qaContainer.className = "qa-pair";
+
+  const questionElem = document.createElement("div");
+  questionElem.className = "question";
+  questionElem.textContent = questionText;
+
+  const answerElem = document.createElement("div");
+  answerElem.className = "answer";
+  answerElem.textContent = answerText;
+
+  qaContainer.appendChild(questionElem);
+  qaContainer.appendChild(answerElem);
+  transcriptDiv.appendChild(qaContainer);
+
+  // Scroll to bottom to show latest entry
+  transcriptDiv.scrollTop = transcriptDiv.scrollHeight;
+}
+</script>
+</div>
+</body>
+</html>

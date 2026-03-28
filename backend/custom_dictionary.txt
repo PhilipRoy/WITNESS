@@ -1,0 +1,167 @@
+# Custom Dictionary for W.I.T.N.E.S.S. Spell Checker
+# Add one word per line
+# Lines starting with # are comments and will be ignored
+# This file supplements the built-in NZ English dictionary
+
+# ========================================
+# Names and surnames
+# ========================================
+alex
+ann
+aroha
+connor
+hone
+liam
+priya
+rangi
+rawiri
+rick
+sally
+sampson
+smith
+taylor
+wiremu
+
+
+# ========================================
+# Common brand names and proper nouns
+# ========================================
+bunnings
+countdown
+mitre
+paknsave
+placemakers
+warehouse
+
+
+# ========================================
+# Māori place/cultural terms
+# ========================================
+hapu
+hapū
+iwi
+kia
+marae
+māori
+ora
+pākehā
+rohe
+whakapapa
+whānau
+
+# ========================================
+# NZ English spellings (UK English)
+# ========================================
+centre
+centres
+colour
+coloured
+colours
+dialling
+favour
+favoured
+favours
+fibre
+fibres
+honour
+honoured
+honours
+litre
+litres
+metre
+metres
+neighbour
+neighbourhood
+neighbours
+neighbouring
+organisation
+organise
+organised
+organising
+theatre
+theatres
+
+
+# ========================================
+# NZ place names or suburbs
+# ========================================
+alicetown
+epsom
+hutt
+kapiti
+karori
+kauri
+kilbirnie
+lower
+manukau
+miramar
+molesworth
+murphy
+onehunga
+papatoetoe
+papakura
+petone
+porirua
+quay
+takanini
+thorndon
+wakefield
+waterloo
+wellington
+
+# ========================================
+# NZ-specific terms
+# ========================================
+bach
+bin
+carpark
+chilly
+dairy
+jandals
+togs
+tramping
+whiteware
+
+# ========================================
+# Vehicle makes/models
+# ========================================
+corolla
+hatchback
+holden
+honda
+hyundai
+mazda
+mazda2
+mazda3
+nissan
+subaru
+toyota
+
+# ========================================
+# Emergency/Police/Crime terms
+# ========================================
+constabulary
+evidential
+hotwire
+hotwiring
+pokies
+sergeant
+superette
+
+# ========================================
+# Common abbreviations
+# ========================================
+am
+ave
+dr
+ln
+nz
+pm
+rd
+st
+
+# ========================================
+# Business/Organisation
+# ========================================
+ltd
+plastics

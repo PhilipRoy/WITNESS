@@ -1,0 +1,7 @@
+# Suspicious Words List for W.I.T.N.E.S.S. Spell Checker
+# These are technically valid English words, but commonly appear as typos in persona files
+# Add one word per line
+# Lines starting with # are comments and will be ignored
+
+# Common typos that are valid words (you will still be warned about the word)
+dunner     # A typo for "dinner"

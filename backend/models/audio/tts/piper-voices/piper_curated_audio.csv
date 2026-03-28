@@ -1,0 +1,18 @@
+onnx-filename,json-filename,name,gender,age-range,accent,notes,speaker_id,source
+en_GB-alba-medium.onnx,en_GB-alba-medium.onnx.json,Agnes,Female,25-45,UK,"Very clear, well spoken Scottish accent with excellent inflection.",0,https://huggingface.co/rhasspy/piper-voices/tree/main/en
+en_GB-aru-medium.onnx,en_GB-aru-medium.onnx.json,Belinda,Female,25-45,UK,Mild but noticeable English accent.,0,https://huggingface.co/rhasspy/piper-voices/tree/main/en
+mv2.onnx,mv2.onnx.json,Catherine,Female,25-45,UK,Clear but with unusual inflections.,14,https://brycebeattie.com/files/tts/
+en_GB-cori-medium.onnx,en_GB-cori-medium.onnx.json,Diane,Female,25-45,UK,"Well spoken UK accent, but unusual inflections and sometimes pronounces oddly.",0,https://huggingface.co/rhasspy/piper-voices/tree/main/en
+en_GB-northern_english_male-medium.onnx,en_GB-northern_english_male-medium.onnx.json,Allan,Male,25-45,UK,Mild but noticeable English accent.,0,https://huggingface.co/rhasspy/piper-voices/tree/main/en
+miro_en-GB.onnx,miro_en-GB.onnx.json,Brian,Male,45-55,UK,"Clear UK accent, but audio has noise and  voice has a lot of inflection at times.",0,https://huggingface.co/collections/OpenVoiceOS/pipertts-voices-68594d08f08e6ec56eddf4eb
+mv2.onnx,mv2.onnx.json,Chris,Male,45-65,UK,"Clear but slightly hoarse, slow-speaking UK accent.",10,https://brycebeattie.com/files/tts/
+en_US-hfc_female-medium.onnx,en_US-hfc_female-medium.onnx.json,Amelia,Female,25-45,US,Very clear voice. Strong American accent with a lot of inflection.,0,https://huggingface.co/rhasspy/piper-voices/tree/main/en
+en_US-kristin-medium.onnx,en_US-kristin-medium.onnx.json,Brooklyn,Female,35-45,US,"Slightly unusual, strong American accent, that speaks slowly.",0,https://huggingface.co/rhasspy/piper-voices/tree/main/en
+mv2.onnx,mv2.onnx.json,Cindy,Female,45-55,US,"Slightly hoarse and noisy audio, with noticeable US accent and nice inflections.",1,https://brycebeattie.com/files/tts/
+mv2.onnx,mv2.onnx.json,Donna,Female,45-55,US,Well spoken US accent.,2,https://brycebeattie.com/files/tts/
+alexa.onnx,alexa.onnx.json,Erica,Female,35-55,US,"Light, well spoken US voice with some slightly unusual inflections.",0,https://github.com/GraceDabbieri/piper-tts-voices/tree/main
+cortana.onnx,cortana.onnx.json,Faith,Female,35-55,US,"Slightly poor quality, well spoken US voice.",0,https://github.com/GraceDabbieri/piper-tts-voices/tree/main
+en_US-hfc_male-medium.onnx,en_US-hfc_male-medium.onnx.json,Austin,Male,35-45,US,Very clear voice. Strong American accent with excellent inflection.,0,https://huggingface.co/rhasspy/piper-voices/tree/main/en
+mv2.onnx,mv2.onnx.json,Bennet,Male,55-65,US,"Slightly hoarse, mild and deep US accent.",5,https://brycebeattie.com/files/tts/
+mv2.onnx,mv2.onnx.json,Carter,Male,35-55,US,"Well spoken, mild and deep US accent.",7,https://brycebeattie.com/files/tts/
+mv2.onnx,mv2.onnx.json,David,Male,45-55,US,"Deep, but slightly unusually accented, hoarse US accent voice.",15,https://brycebeattie.com/files/tts/
