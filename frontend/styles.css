@@ -496,6 +496,7 @@ a, p, h1, h2, h3, h4, h5, h6, label {
   gap: 8px;
   margin-left: 40px;
   flex: 1;
+  max-width: 700px;
 }
 
 .chat-input {
